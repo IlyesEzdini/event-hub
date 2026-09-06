@@ -16,6 +16,8 @@ import ClubsPage from '@/pages/admin/ClubsPage'
 import AdminReportsPage from '@/pages/admin/AdminReportsPage'
 import NotFound from '@/pages/NotFound'
 import { FullScreenLoader } from '@/components/ui/FullScreenLoader'
+import EventRequestPage from '@/pages/EventRequestPage'
+import EventRequestsAdminPage from '@/pages/admin/EventRequestsAdminPage'
 
 function DashboardRouter() {
   const { profile, loading } = useAuth()
@@ -41,6 +43,7 @@ export default function App() {
             <Route path="/dashboard" element={<DashboardRouter />} />
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/reports" element={<ReportsPage />} />
+            <Route path="/event-request" element={<EventRequestPage />} />
             <Route path="/resources" element={<ResourcesPage />} />
             <Route path="/profile" element={<ProfilePage />} />
 
@@ -48,6 +51,7 @@ export default function App() {
               <Route path="/admin/managers" element={<ManagersPage />} />
               <Route path="/admin/clubs" element={<ClubsPage />} />
               <Route path="/admin/reports" element={<AdminReportsPage />} />
+              <Route path="/admin/event-requests" element={<EventRequestsAdminPage />} />
             </Route>
           </Route>
         </Route>
