@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FileText, Users, UserCheck, CalendarCheck2, Users2 } from 'lucide-react'
+import { FileText, Users, UserCheck, CalendarCheck2, Users2, Eye, Table2 } from 'lucide-react'
 import { useClubs } from '@/hooks/useClubs'
 import { listAllReports } from '@/services/reports'
 import type { ReportWithClub } from '@/types/database'
 import { MONTH_NAMES } from '@/utils/reportStatus'
 import { CardSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Modal } from '@/components/ui/Modal'
+import { YearlyReportSheet } from '@/components/reports/YearlyReportSheet'
 
 const currentYear = new Date().getFullYear()
 const YEAR_OPTIONS = [currentYear - 1, currentYear, currentYear + 1]
@@ -17,6 +19,8 @@ export default function AdminReportsPage() {
   const [clubFilter, setClubFilter] = useState('all')
   const [monthFilter, setMonthFilter] = useState(new Date().getMonth() + 1)
   const [yearFilter, setYearFilter] = useState(currentYear)
+  const [detailReport, setDetailReport] = useState<ReportWithClub | null>(null)
+  const [yearlyClubId, setYearlyClubId] = useState<string | null>(null)
 
   useEffect(() => {
     listAllReports()
@@ -44,14 +48,21 @@ export default function AdminReportsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2.5">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
-          <FileText size={20} />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
+            <FileText size={20} />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-slate-900">Reports</h1>
+            <p className="text-sm text-slate-500">Monthly submissions across all clubs</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">Reports</h1>
-          <p className="text-sm text-slate-500">Monthly submissions across all clubs</p>
-        </div>
+        {clubFilter !== 'all' && (
+          <button className="btn-secondary" onClick={() => setYearlyClubId(clubFilter)}>
+            <Table2 size={16} /> Voir la fiche annuelle
+          </button>
+        )}
       </div>
 
       <div className="card grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 sm:p-5">
@@ -109,6 +120,9 @@ export default function AdminReportsPage() {
                 <th className="hidden px-4 py-3 sm:table-cell">Active</th>
                 <th className="hidden px-4 py-3 md:table-cell">Events</th>
                 <th className="hidden px-4 py-3 md:table-cell">Meetings</th>
+                <th className="hidden px-4 py-3 lg:table-cell">Évaluation</th>
+                <th className="hidden px-4 py-3 lg:table-cell">Remarques</th>
+                <th className="px-4 py-3 text-right">Détails</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -124,6 +138,21 @@ export default function AdminReportsPage() {
                   <td className="hidden px-4 py-3 text-slate-600 sm:table-cell">{r.active_members}</td>
                   <td className="hidden px-4 py-3 text-slate-600 md:table-cell">{r.events}</td>
                   <td className="hidden px-4 py-3 text-slate-600 md:table-cell">{r.meetings}</td>
+                  <td className="hidden max-w-[160px] truncate px-4 py-3 text-slate-500 lg:table-cell">
+                    {r.evaluation || '—'}
+                  </td>
+                  <td className="hidden max-w-[160px] truncate px-4 py-3 text-slate-500 lg:table-cell">
+                    {r.remarks || '—'}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      onClick={() => setDetailReport(r)}
+                      aria-label="Voir les détails"
+                      className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-brand-600"
+                    >
+                      <Eye size={15} />
+                    </button>
+                  </td>
                 </tr>
               ))}
               {clubsWithoutReport.map((c) => (
@@ -138,12 +167,62 @@ export default function AdminReportsPage() {
                   <td className="hidden px-4 py-3 text-slate-400 sm:table-cell">—</td>
                   <td className="hidden px-4 py-3 text-slate-400 md:table-cell">—</td>
                   <td className="hidden px-4 py-3 text-slate-400 md:table-cell">—</td>
+                  <td className="hidden px-4 py-3 text-slate-400 lg:table-cell">—</td>
+                  <td className="hidden px-4 py-3 text-slate-400 lg:table-cell">—</td>
+                  <td className="px-4 py-3" />
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      <Modal
+        open={!!detailReport}
+        onClose={() => setDetailReport(null)}
+        title={detailReport ? `${detailReport.club?.name} — ${MONTH_NAMES[detailReport.month - 1]} ${detailReport.year}` : ''}
+      >
+        {detailReport && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <Stat label="Membres" value={detailReport.members} />
+              <Stat label="Actifs" value={detailReport.active_members} />
+              <Stat label="Événements" value={detailReport.events} />
+              <Stat label="Réunions" value={detailReport.meetings} />
+            </div>
+            <div>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Évaluation</p>
+              <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700 whitespace-pre-wrap">
+                {detailReport.evaluation || '—'}
+              </p>
+            </div>
+            <div>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Remarques</p>
+              <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700 whitespace-pre-wrap">
+                {detailReport.remarks || '—'}
+              </p>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!yearlyClubId}
+        onClose={() => setYearlyClubId(null)}
+        title={clubs.find((c) => c.id === yearlyClubId)?.name ?? 'Fiche annuelle'}
+        maxWidth="max-w-6xl"
+      >
+        {yearlyClubId && <YearlyReportSheet clubId={yearlyClubId} createdByProfileId={null} readOnly />}
+      </Modal>
+    </div>
+  )
+}
+
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-3">
+      <p className="text-xs font-semibold text-slate-400">{label}</p>
+      <p className="text-lg font-bold text-slate-900">{value}</p>
     </div>
   )
 }

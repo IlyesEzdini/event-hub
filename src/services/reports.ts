@@ -52,3 +52,17 @@ export async function listAllReports(): Promise<ReportWithClub[]> {
   if (error) throw error
   return data as ReportWithClub[]
 }
+
+/**
+ * Fetches every report for one club across a full academic year
+ * (September of `academicStartYear` through August of `academicStartYear + 1`).
+ */
+export async function listReportsForClubYear(clubId: string, academicStartYear: number): Promise<Report[]> {
+  const { data, error } = await supabase
+    .from('reports')
+    .select('*')
+    .eq('club_id', clubId)
+    .or(`and(year.eq.${academicStartYear},month.gte.9),and(year.eq.${academicStartYear + 1},month.lte.8)`)
+  if (error) throw error
+  return data as Report[]
+}
