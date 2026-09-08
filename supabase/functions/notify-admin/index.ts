@@ -59,8 +59,19 @@ Deno.serve(async (req) => {
     const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
     const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
     const ADMIN_EMAIL = Deno.env.get('ADMIN_EMAIL')
-    console.log("RESEND_API_KEY exists:", !!Deno.env.get("RESEND_API_KEY"))
-    console.log("ADMIN_EMAIL exists:", !!Deno.env.get("ADMIN_EMAIL"))
+    if (!RESEND_API_KEY) {
+  console.error("❌ RESEND_API_KEY NOT FOUND")
+} else {
+  console.log("✅ RESEND_API_KEY FOUND")
+}
+
+if (!ADMIN_EMAIL) {
+  console.error("❌ ADMIN_EMAIL NOT FOUND")
+} else {
+  console.log("✅ ADMIN_EMAIL FOUND")
+}
+
+console.log("📧 FROM_EMAIL:", FROM_EMAIL)
     const FROM_EMAIL = Deno.env.get('FROM_EMAIL') ?? 'EventHub <onboarding@resend.dev>'
 
     const authHeader = req.headers.get('Authorization') ?? ''
