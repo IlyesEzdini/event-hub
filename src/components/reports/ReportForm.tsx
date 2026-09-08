@@ -67,7 +67,6 @@ export function ReportForm({ clubId, month, year, existing, createdByProfileId, 
       )
       toast.success(status === 'submitted' ? 'Monthly report submitted.' : 'Draft saved.')
       if (status === 'submitted') {
-        notifyAdmin('report', `${MONTH_NAMES[month - 1]} ${year}`, saved.id)
       }
       onSuccess()
     } catch (err) {
