@@ -34,52 +34,16 @@ export async function notifyAdmin(
   relatedId?: string,
 ): Promise<void> {
   try {
-    console.log('📨 Calling notify-admin Edge Function...', {
-      actionType,
-      relatedId,
+    const { error } = await supabase.functions.invoke('notify-admin', {
+      body: { action_type: actionType, summary, related_id: relatedId },
     })
-
-    const { data, error } = await supabase.functions.invoke(
-      'notify-admin',
-      {
-        body: {
-          action_type: actionType,
-          summary,
-          related_id: relatedId ?? null,
-        },
-      },
-    )
-
     if (error) {
-      console.error(
-        '❌ notify-admin Edge Function failed:',
-        error,
-      )
-      return
+      const context = (error as { context?: { json?: () => Promise<{ error?: string }> } }).context
+      const payload = context?.json ? await context.json() : null
+      console.error('notifyAdmin failed:', payload?.error ?? error.message)
     }
-
-    if (data?.error) {
-      console.error(
-        '❌ notify-admin returned an error:',
-        data.error,
-      )
-      return
-    }
-
-    console.log(
-      '✅ notify-admin Edge Function completed successfully:',
-      {
-        actionType,
-        notificationId: data?.notification?.id,
-        emailSent: data?.email?.sent,
-        emailId: data?.email?.id,
-      },
-    )
   } catch (err) {
-    console.error(
-      '❌ notify-admin invocation failed:',
-      err,
-    )
+    console.error('notifyAdmin failed (non-blocking):', err)
   }
 }
 
