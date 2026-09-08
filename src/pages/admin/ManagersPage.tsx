@@ -76,6 +76,8 @@ export default function ManagersPage() {
                   <th className="px-4 py-3">Manager</th>
                   <th className="px-4 py-3">Club</th>
                   <th className="px-4 py-3">Username</th>
+                  <th className="hidden px-4 py-3 lg:table-cell">Phone</th>
+                  <th className="hidden px-4 py-3 lg:table-cell">Email</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
@@ -86,6 +88,8 @@ export default function ManagersPage() {
                     <td className="px-4 py-3 font-medium text-slate-800">{m.manager_name}</td>
                     <td className="px-4 py-3 text-slate-600">{m.club?.name ?? '—'}</td>
                     <td className="px-4 py-3 text-slate-600">{m.username}</td>
+                    <td className="hidden px-4 py-3 text-slate-600 lg:table-cell">{m.phone_number ?? '—'}</td>
+                    <td className="hidden px-4 py-3 text-slate-600 lg:table-cell">{m.email ?? '—'}</td>
                     <td className="px-4 py-3">
                       <span className={`badge ${m.is_active ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' : 'bg-slate-100 text-slate-500 ring-1 ring-slate-200'}`}>
                         {m.is_active ? 'Active' : 'Disabled'}
@@ -116,6 +120,11 @@ export default function ManagersPage() {
                     <div>
                       <p className="text-sm font-semibold text-slate-800">{m.manager_name}</p>
                       <p className="text-xs text-slate-500">{m.club?.name ?? '—'} · @{m.username}</p>
+                      {(m.phone_number || m.email) && (
+                        <p className="mt-0.5 text-xs text-slate-400">
+                          {[m.phone_number, m.email].filter(Boolean).join(' · ')}
+                        </p>
+                      )}
                     </div>
                     <span className={`badge ${m.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
                       {m.is_active ? 'Active' : 'Disabled'}
@@ -233,6 +242,8 @@ function AddManagerForm({ clubs, onCreated }: { clubs: { id: string; name: strin
   const [clubId, setClubId] = useState('')
   const [newClubName, setNewClubName] = useState('')
   const [username, setUsername] = useState('')
+  const [phoneNumber, setPhoneNumber] = useState('')
+  const [contactEmail, setContactEmail] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -255,7 +266,14 @@ function AddManagerForm({ clubs, onCreated }: { clubs: { id: string; name: strin
     setSubmitting(true)
     try {
       const resolvedClubId = clubMode === 'existing' ? clubId : (await findOrCreateClub(newClubName)).id
-      await createManager({ manager_name: managerName.trim(), username: username.trim(), password, club_id: resolvedClubId })
+      await createManager({
+        manager_name: managerName.trim(),
+        username: username.trim(),
+        password,
+        club_id: resolvedClubId,
+        phone_number: phoneNumber.trim() || undefined,
+        email: contactEmail.trim() || undefined,
+      })
       toast.success('Manager added successfully.')
       onCreated()
     } catch (err) {
@@ -302,6 +320,17 @@ function AddManagerForm({ clubs, onCreated }: { clubs: { id: string; name: strin
         <input className="input" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="ahmed" />
       </div>
 
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Phone Number</label>
+          <input className="input" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="+216 XX XXX XXX" />
+        </div>
+        <div>
+          <label className="label">Email</label>
+          <input type="email" className="input" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="ahmed@example.com" />
+        </div>
+      </div>
+
       <div>
         <label className="label">Initial Password</label>
         <input type="text" className="input" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" />
@@ -327,6 +356,8 @@ function EditManagerForm({
 }) {
   const [managerName, setManagerName] = useState(manager.manager_name)
   const [username, setUsername] = useState(manager.username)
+  const [phoneNumber, setPhoneNumber] = useState(manager.phone_number ?? '')
+  const [contactEmail, setContactEmail] = useState(manager.email ?? '')
   const [clubId, setClubId] = useState(manager.club_id ?? '')
   const [submitting, setSubmitting] = useState(false)
 
@@ -339,6 +370,8 @@ function EditManagerForm({
         manager_name: managerName.trim(),
         username: username.trim(),
         club_id: clubId || undefined,
+        phone_number: phoneNumber.trim(),
+        email: contactEmail.trim(),
       })
       toast.success('Manager updated successfully.')
       onSaved()
@@ -371,6 +404,16 @@ function EditManagerForm({
       <div>
         <label className="label">Username</label>
         <input className="input" value={username} onChange={(e) => setUsername(e.target.value)} />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Phone Number</label>
+          <input className="input" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="+216 XX XXX XXX" />
+        </div>
+        <div>
+          <label className="label">Email</label>
+          <input type="email" className="input" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="ahmed@example.com" />
+        </div>
       </div>
       <div className="flex justify-end gap-2 pt-2">
         <button type="submit" className="btn-primary" disabled={submitting}>

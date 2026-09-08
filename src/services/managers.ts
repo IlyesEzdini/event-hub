@@ -35,6 +35,8 @@ export async function createManager(input: {
   username: string
   password: string
   club_id: string
+  phone_number?: string
+  email?: string
 }): Promise<ProfileWithClub> {
   const data = await callManageManager({ action: 'create', ...input })
   return data.profile as ProfileWithClub
@@ -45,6 +47,8 @@ export async function replaceOrUpdateManager(input: {
   manager_name?: string
   username?: string
   club_id?: string
+  phone_number?: string
+  email?: string
 }): Promise<ProfileWithClub> {
   const data = await callManageManager({ action: 'replace', ...input })
   return data.profile as ProfileWithClub

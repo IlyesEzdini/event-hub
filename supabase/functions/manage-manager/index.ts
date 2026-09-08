@@ -71,13 +71,13 @@ Deno.serve(async (req) => {
     const { action } = body
 
     if (action === 'create') {
-      const { manager_name, username, password, club_id } = body
+      const { manager_name, username, password, club_id, phone_number, email: contactEmail } = body
       if (!manager_name || !username || !password || !club_id) {
         return json({ error: 'manager_name, username, password and club_id are required.' }, 400)
       }
-      const email = usernameToEmail(username)
+      const authEmail = usernameToEmail(username)
       const { data: created, error: createError } = await admin.auth.admin.createUser({
-        email,
+        email: authEmail,
         password,
         email_confirm: true,
       })
@@ -89,6 +89,8 @@ Deno.serve(async (req) => {
           auth_user_id: created.user.id,
           manager_name,
           username,
+          phone_number: phone_number ?? null,
+          email: contactEmail ?? null,
           club_id,
           role: 'manager',
         })
@@ -107,7 +109,7 @@ Deno.serve(async (req) => {
       // Rename the manager assigned to a club (or edit their display name),
       // WITHOUT touching club_id on any historical events/reports — those
       // stay linked to the club, not the manager.
-      const { profile_id, manager_name, username, club_id } = body
+      const { profile_id, manager_name, username, club_id, phone_number, email: contactEmail } = body
       if (!profile_id) return json({ error: 'profile_id is required.' }, 400)
 
       const { data: existingProfile, error: findError } = await admin
@@ -120,6 +122,8 @@ Deno.serve(async (req) => {
       const updates: Record<string, unknown> = {}
       if (manager_name) updates.manager_name = manager_name
       if (club_id) updates.club_id = club_id
+      if (phone_number !== undefined) updates.phone_number = phone_number || null
+      if (contactEmail !== undefined) updates.email = contactEmail || null
       if (username && username !== existingProfile.username) {
         const newEmail = usernameToEmail(username)
         const { error: emailError } = await admin.auth.admin.updateUserById(existingProfile.auth_user_id, {

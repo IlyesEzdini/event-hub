@@ -13,6 +13,8 @@ export interface Profile {
   auth_user_id: string
   manager_name: string
   username: string
+  phone_number: string | null
+  email: string | null
   club_id: string | null
   role: Role
   is_active: boolean
