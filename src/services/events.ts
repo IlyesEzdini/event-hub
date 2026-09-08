@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type { EventWithClub } from '@/types/database'
+import { notifyAdmin } from '@/services/notifications'
 
 export interface EventInput {
   event_name: string
@@ -14,33 +15,85 @@ export async function listEvents(): Promise<EventWithClub[]> {
   const { data, error } = await supabase
     .from('events')
     .select('*, club:clubs(*)')
-    .order('event_date', { ascending: true })
-  if (error) throw error
+    .order('event_date', {
+      ascending: true,
+    })
+
+  if (error) {
+    throw error
+  }
+
   return data as EventWithClub[]
 }
 
-export async function createEvent(input: EventInput, createdByProfileId: string | null) {
+export async function createEvent(
+  input: EventInput,
+  createdByProfileId: string | null,
+) {
+  /*
+   * 1. Create the event first.
+   *
+   * We NEVER notify before the database operation succeeds.
+   */
   const { data, error } = await supabase
     .from('events')
-    .insert({ ...input, created_by: createdByProfileId })
+    .insert({
+      ...input,
+      created_by: createdByProfileId,
+    })
     .select('*, club:clubs(*)')
     .single()
-  if (error) throw error
-  return data as EventWithClub
+
+  if (error) {
+    throw error
+  }
+
+  const created = data as EventWithClub
+
+  /*
+   * 2. Event was successfully created.
+   *
+   * Now call the notification Edge Function.
+   *
+   * `void` makes this fire-and-forget so a notification failure
+   * cannot make an already-successful event creation fail.
+   */
+  void notifyAdmin(
+    'event',
+    `Événement « ${created.event_name} » — ${created.event_date} à ${created.event_timing}, ${created.event_location}.`,
+    created.id,
+  )
+
+  return created
 }
 
-export async function updateEvent(id: string, input: Partial<EventInput>) {
+export async function updateEvent(
+  id: string,
+  input: Partial<EventInput>,
+) {
   const { data, error } = await supabase
     .from('events')
     .update(input)
     .eq('id', id)
     .select('*, club:clubs(*)')
     .single()
-  if (error) throw error
+
+  if (error) {
+    throw error
+  }
+
   return data as EventWithClub
 }
 
-export async function deleteEvent(id: string) {
-  const { error } = await supabase.from('events').delete().eq('id', id)
-  if (error) throw error
+export async function deleteEvent(
+  id: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('events')
+    .delete()
+    .eq('id', id)
+
+  if (error) {
+    throw error
+  }
 }

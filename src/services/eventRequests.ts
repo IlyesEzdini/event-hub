@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type { Club } from '@/types/database'
+import { notifyAdmin } from '@/services/notifications'
 
 export interface EventRequest {
   id: string
@@ -20,7 +21,8 @@ export interface EventRequest {
   submitted_at: string
 }
 
-export interface EventRequestWithClub extends EventRequest {
+export interface EventRequestWithClub
+  extends EventRequest {
   club: Club | null
 }
 
@@ -44,37 +46,98 @@ export async function createEventRequest(
   submittedByProfileId: string | null,
   submittedByName: string,
 ): Promise<EventRequest> {
+  /*
+   * 1. Insert the event request.
+   */
   const { data, error } = await supabase
     .from('event_requests')
-    .insert({ ...input, created_by: submittedByProfileId, submitted_by_name: submittedByName })
+    .insert({
+      ...input,
+      created_by: submittedByProfileId,
+      submitted_by_name: submittedByName,
+    })
     .select()
     .single()
-  if (error) throw error
-  return data as EventRequest
+
+  if (error) {
+    throw error
+  }
+
+  const request = data as EventRequest
+
+  /*
+   * 2. Database insertion succeeded.
+   *
+   * Now notify the admin.
+   */
+  void notifyAdmin(
+    'event_request',
+    `Demande d'événement — ${
+      input.date_horaire || 'date non précisée'
+    }${
+      input.lieu
+        ? ` à ${input.lieu}`
+        : ''
+    }.`,
+    request.id,
+  )
+
+  return request
 }
 
-/** All requests ever submitted for one club, most recent first. */
-export async function listEventRequestsForClub(clubId: string): Promise<EventRequestWithClub[]> {
+/**
+ * All requests for one club,
+ * most recent first.
+ */
+export async function listEventRequestsForClub(
+  clubId: string,
+): Promise<EventRequestWithClub[]> {
   const { data, error } = await supabase
     .from('event_requests')
     .select('*, club:clubs(*)')
     .eq('club_id', clubId)
-    .order('submitted_at', { ascending: false })
-  if (error) throw error
+    .order('submitted_at', {
+      ascending: false,
+    })
+
+  if (error) {
+    throw error
+  }
+
   return data as EventRequestWithClub[]
 }
 
-/** Every request across every club — used by the admin overview. */
-export async function listAllEventRequests(): Promise<EventRequestWithClub[]> {
+/**
+ * Every request across every club.
+ *
+ * Used by the admin overview.
+ */
+export async function listAllEventRequests(): Promise<
+  EventRequestWithClub[]
+> {
   const { data, error } = await supabase
     .from('event_requests')
     .select('*, club:clubs(*)')
-    .order('submitted_at', { ascending: false })
-  if (error) throw error
+    .order('submitted_at', {
+      ascending: false,
+    })
+
+  if (error) {
+    throw error
+  }
+
   return data as EventRequestWithClub[]
 }
 
-export async function deleteEventRequest(id: string): Promise<void> {
-  const { error } = await supabase.from('event_requests').delete().eq('id', id)
-  if (error) throw error
+export async function deleteEventRequest(
+  id: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('event_requests')
+    .delete()
+    .eq('id', id)
+
+  if (error) {
+    throw error
+  }
 }
