@@ -36,11 +36,11 @@ const ACTION_LABELS: Record<string, string> = {
   event_request: "a envoyé une demande d'événement",
 }
 
-async function sendEmail(apiKey: string, from: string, to: string, subject: string, html: string) {
+async function sendEmail(RESEND_API_KEY: string, from: string, to: string, subject: string, html: string) {
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${RESEND_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ from, to: [to], subject, html }),
