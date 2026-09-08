@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react'
 import { listReportsForClubYear, upsertReport } from '@/services/reports'
+import { notifyAdmin } from '@/services/notifications'
 import { getAcademicMonths, getAcademicYearStart, isCurrentAcademicMonth } from '@/utils/academicYear'
 
 type RowKey = 'members' | 'active_members' | 'events' | 'meetings' | 'evaluation' | 'remarks'
@@ -136,7 +137,7 @@ export function YearlyReportSheet({
     const cell = cells[cellKey(current.month, current.year)] ?? emptyCell()
     setSubmitting(true)
     try {
-      await upsertReport(
+      const saved = await upsertReport(
         {
           club_id: clubId,
           month: current.month,
@@ -153,6 +154,7 @@ export function YearlyReportSheet({
       )
       setCells((prev) => ({ ...prev, [cellKey(current.month, current.year)]: { ...cell, status: 'submitted' } }))
       toast.success(`Rapport de ${current.label} soumis.`)
+      notifyAdmin('report', current.label, saved.id)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Impossible de soumettre ce mois.')
     } finally {

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import toast from 'react-hot-toast'
 import { createEventRequest, type EventRequestInput } from '@/services/eventRequests'
+import { notifyAdmin } from '@/services/notifications'
 
 interface Props {
   clubId: string
@@ -52,8 +53,9 @@ export function EventRequestForm({ clubId, submittedByProfileId, submittedByName
     e.preventDefault()
     setSubmitting(true)
     try {
-      await createEventRequest({ club_id: clubId, ...form }, submittedByProfileId, submittedByName)
+      const created = await createEventRequest({ club_id: clubId, ...form }, submittedByProfileId, submittedByName)
       toast.success('Demande d\'événement envoyée.')
+      notifyAdmin('event_request', form.objectifs || 'Nouvelle demande d\'événement', created.id)
       setForm(emptyForm())
       onSuccess()
     } catch (err) {

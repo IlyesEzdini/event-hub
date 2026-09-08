@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import toast from 'react-hot-toast'
 import type { Club, EventWithClub } from '@/types/database'
 import { createEvent, updateEvent } from '@/services/events'
+import { notifyAdmin } from '@/services/notifications'
 
 interface Props {
   clubId?: string // pre-filled & locked for managers
@@ -50,8 +51,9 @@ export function EventForm({ clubId, clubs, event, createdByProfileId, onSuccess,
         await updateEvent(event.id, payload)
         toast.success('Event updated successfully.')
       } else {
-        await createEvent(payload, createdByProfileId)
+        const created = await createEvent(payload, createdByProfileId)
         toast.success('Event added successfully.')
+        notifyAdmin('event', `${payload.event_name} — ${payload.event_date}`, created.id)
       }
       onSuccess()
     } catch (err) {

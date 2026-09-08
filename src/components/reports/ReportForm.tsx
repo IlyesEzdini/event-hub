@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import toast from 'react-hot-toast'
 import type { Report } from '@/types/database'
 import { upsertReport } from '@/services/reports'
+import { notifyAdmin } from '@/services/notifications'
 import { MONTH_NAMES } from '@/utils/reportStatus'
 
 interface Props {
@@ -49,7 +50,7 @@ export function ReportForm({ clubId, month, year, existing, createdByProfileId, 
     if (!validate()) return
     setSubmitting(status)
     try {
-      await upsertReport(
+      const saved = await upsertReport(
         {
           club_id: clubId,
           month,
@@ -65,6 +66,9 @@ export function ReportForm({ clubId, month, year, existing, createdByProfileId, 
         createdByProfileId,
       )
       toast.success(status === 'submitted' ? 'Monthly report submitted.' : 'Draft saved.')
+      if (status === 'submitted') {
+        notifyAdmin('report', `${MONTH_NAMES[month - 1]} ${year}`, saved.id)
+      }
       onSuccess()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Unable to save the report.')
