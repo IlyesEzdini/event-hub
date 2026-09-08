@@ -5,17 +5,21 @@
 //   1) looks up the CALLER's own profile server-side (never trusts a
 //      manager/club name sent from the browser),
 //   2) records a row in admin_notifications,
-//   3) emails the coordinator via Resend.
+//   3) emails the coordinator via Gmail SMTP.
 //
 // If the caller is the admin, this is a no-op (we don't notify the admin
 // about their own actions).
 //
 // Secrets required (set with `supabase secrets set ...`):
-//   RESEND_API_KEY   — from resend.com → API Keys
-//   ADMIN_EMAIL      — the coordinator's real inbox, e.g. you@example.com
-//   FROM_EMAIL       — optional, defaults to onboarding@resend.dev
+//   GMAIL_USER          — the sending Gmail address, e.g. you@gmail.com
+//   GMAIL_APP_PASSWORD  — a 16-char Google App Password (NOT your normal
+//                          Gmail password — requires 2FA enabled on the
+//                          account, generate at myaccount.google.com/apppasswords)
+//   ADMIN_EMAIL         — the coordinator's real inbox, e.g. you@example.com
+//   GMAIL_FROM_NAME      — optional display name, defaults to "EventHub"
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
+import nodemailer from 'npm:nodemailer@6.9.10'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -36,19 +40,37 @@ const ACTION_LABELS: Record<string, string> = {
   event_request: "a envoyé une demande d'événement",
 }
 
-async function sendEmail(RESEND_API_KEY: string, from: string, to: string, subject: string, html: string) {
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ from, to: [to], subject, html }),
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Resend error (${res.status}): ${text}`)
+// Reused across invocations on a warm isolate — building a fresh SMTP
+// connection per request would be wasteful and slower.
+let cachedTransport: ReturnType<typeof nodemailer.createTransport> | null = null
+
+function getTransport(gmailUser: string, gmailAppPassword: string) {
+  if (!cachedTransport) {
+    cachedTransport = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true, // true = TLS on connect (required for port 465)
+      auth: { user: gmailUser, pass: gmailAppPassword },
+    })
   }
+  return cachedTransport
+}
+
+async function sendEmail(
+  gmailUser: string,
+  gmailAppPassword: string,
+  from: string,
+  to: string,
+  subject: string,
+  html: string,
+) {
+  const transport = getTransport(gmailUser, gmailAppPassword)
+  await new Promise<void>((resolve, reject) => {
+    transport.sendMail({ from, to, subject, html }, (error) => {
+      if (error) return reject(error instanceof Error ? error : new Error(String(error)))
+      resolve()
+    })
+  })
 }
 
 Deno.serve(async (req) => {
@@ -57,22 +79,30 @@ Deno.serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
     const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
-    const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
+    const GMAIL_USER = Deno.env.get('GMAIL_USER')
+    const GMAIL_APP_PASSWORD = Deno.env.get('GMAIL_APP_PASSWORD')
     const ADMIN_EMAIL = Deno.env.get('ADMIN_EMAIL')
-    if (!RESEND_API_KEY) {
-  console.error("❌ RESEND_API_KEY NOT FOUND")
-} else {
-  console.log("✅ RESEND_API_KEY FOUND")
-}
+    if (!GMAIL_USER) {
+      console.error('❌ GMAIL_USER NOT FOUND')
+    } else {
+      console.log('✅ GMAIL_USER FOUND')
+    }
+    if (!GMAIL_APP_PASSWORD) {
+      console.error('❌ GMAIL_APP_PASSWORD NOT FOUND')
+    } else {
+      console.log('✅ GMAIL_APP_PASSWORD FOUND')
+    }
+    if (!ADMIN_EMAIL) {
+      console.error('❌ ADMIN_EMAIL NOT FOUND')
+    } else {
+      console.log('✅ ADMIN_EMAIL FOUND')
+    }
 
-if (!ADMIN_EMAIL) {
-  console.error("❌ ADMIN_EMAIL NOT FOUND")
-} else {
-  console.log("✅ ADMIN_EMAIL FOUND")
-}
-
-    const FROM_EMAIL = Deno.env.get('FROM_EMAIL') ?? 'EventHub <onboarding@resend.dev>'
-console.log("📧 FROM_EMAIL:", FROM_EMAIL)
+    const FROM_NAME = Deno.env.get('GMAIL_FROM_NAME') ?? 'EventHub'
+    // Gmail requires the From header to be the authenticated account (or a
+    // verified "Send As" alias) — so we build it from GMAIL_USER, never from
+    // a client-supplied value.
+    const FROM_EMAIL = GMAIL_USER ? `${FROM_NAME} <${GMAIL_USER}>` : undefined
 
     const authHeader = req.headers.get('Authorization') ?? ''
     if (!authHeader) return json({ error: 'Missing Authorization header' }, 401)
@@ -126,10 +156,11 @@ console.log("📧 FROM_EMAIL:", FROM_EMAIL)
 
     // Email is best-effort: the notification row is already saved, so a
     // failure here never blocks or loses the manager's underlying action.
-    if (RESEND_API_KEY && ADMIN_EMAIL) {
+    if (GMAIL_USER && GMAIL_APP_PASSWORD && ADMIN_EMAIL && FROM_EMAIL) {
       try {
         await sendEmail(
-          RESEND_API_KEY,
+          GMAIL_USER,
+          GMAIL_APP_PASSWORD,
           FROM_EMAIL,
           ADMIN_EMAIL,
           `EventHub — ${profile.manager_name} ${ACTION_LABELS[action_type]}`,

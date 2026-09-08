@@ -5,9 +5,10 @@
 // manager a message tailored to what they did.
 //
 // Secrets required (same as notify-admin):
-//   RESEND_API_KEY, FROM_EMAIL (optional)
+//   GMAIL_USER, GMAIL_APP_PASSWORD, GMAIL_FROM_NAME (optional)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
+import nodemailer from 'npm:nodemailer@6.9.10'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -37,19 +38,37 @@ const MANAGER_MESSAGES: Record<string, { subject: string; body: string }> = {
   },
 }
 
-async function sendEmail(apiKey: string, from: string, to: string, subject: string, html: string) {
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ from, to: [to], subject, html }),
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Resend error (${res.status}): ${text}`)
+// Reused across invocations on a warm isolate — building a fresh SMTP
+// connection per request would be wasteful and slower.
+let cachedTransport: ReturnType<typeof nodemailer.createTransport> | null = null
+
+function getTransport(gmailUser: string, gmailAppPassword: string) {
+  if (!cachedTransport) {
+    cachedTransport = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true, // true = TLS on connect (required for port 465)
+      auth: { user: gmailUser, pass: gmailAppPassword },
+    })
   }
+  return cachedTransport
+}
+
+async function sendEmail(
+  gmailUser: string,
+  gmailAppPassword: string,
+  from: string,
+  to: string,
+  subject: string,
+  html: string,
+) {
+  const transport = getTransport(gmailUser, gmailAppPassword)
+  await new Promise<void>((resolve, reject) => {
+    transport.sendMail({ from, to, subject, html }, (error) => {
+      if (error) return reject(error instanceof Error ? error : new Error(String(error)))
+      resolve()
+    })
+  })
 }
 
 Deno.serve(async (req) => {
@@ -58,8 +77,13 @@ Deno.serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
     const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
-    const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
-    const FROM_EMAIL = Deno.env.get('FROM_EMAIL') ?? 'EventHub <onboarding@resend.dev>'
+    const GMAIL_USER = Deno.env.get('GMAIL_USER')
+    const GMAIL_APP_PASSWORD = Deno.env.get('GMAIL_APP_PASSWORD')
+    const FROM_NAME = Deno.env.get('GMAIL_FROM_NAME') ?? 'EventHub'
+    // Gmail requires the From header to be the authenticated account (or a
+    // verified "Send As" alias) — so we build it from GMAIL_USER, never from
+    // a client-supplied value.
+    const FROM_EMAIL = GMAIL_USER ? `${FROM_NAME} <${GMAIL_USER}>` : undefined
 
     const authHeader = req.headers.get('Authorization') ?? ''
     if (!authHeader) return json({ error: 'Missing Authorization header' }, 401)
@@ -99,12 +123,13 @@ Deno.serve(async (req) => {
       .single()
     if (updateError) return json({ error: updateError.message }, 400)
 
-    if (RESEND_API_KEY && existing.manager_email) {
+    if (GMAIL_USER && GMAIL_APP_PASSWORD && FROM_EMAIL && existing.manager_email) {
       const template = MANAGER_MESSAGES[existing.action_type]
       if (template) {
         try {
           await sendEmail(
-            RESEND_API_KEY,
+            GMAIL_USER,
+            GMAIL_APP_PASSWORD,
             FROM_EMAIL,
             existing.manager_email,
             template.subject,
