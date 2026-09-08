@@ -2,12 +2,15 @@ import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { CalendarClock, LogOut, Menu, X } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { usePendingNotificationsCount } from '@/hooks/useNotifications'
 import { managerNav, adminNav } from './navConfig'
 
 export function MobileTopbar() {
   const [open, setOpen] = useState(false)
   const { profile, signOut } = useAuth()
-  const items = profile?.role === 'admin' ? adminNav : managerNav
+  const isAdmin = profile?.role === 'admin'
+  const items = isAdmin ? adminNav : managerNav
+  const { count: pendingCount } = usePendingNotificationsCount(isAdmin)
 
   return (
     <>
@@ -64,6 +67,11 @@ export function MobileTopbar() {
                 >
                   <item.icon size={18} />
                   {item.label}
+                  {item.to === '/admin/notifications' && pendingCount > 0 && (
+                    <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+                      {pendingCount > 99 ? '99+' : pendingCount}
+                    </span>
+                  )}
                 </NavLink>
               ))}
             </nav>
@@ -77,12 +85,12 @@ export function MobileTopbar() {
         </div>
       )}
 
-      <BottomTabBar items={items.slice(0, 4)} />
+      <BottomTabBar items={items.slice(0, 4)} pendingCount={pendingCount} />
     </>
   )
 }
 
-function BottomTabBar({ items }: { items: typeof managerNav }) {
+function BottomTabBar({ items, pendingCount }: { items: typeof managerNav; pendingCount: number }) {
   return (
     <nav className="fixed bottom-0 inset-x-0 z-30 flex border-t border-slate-200 bg-white/95 backdrop-blur lg:hidden pb-[env(safe-area-inset-bottom)]">
       {items.map((item) => (
@@ -90,12 +98,19 @@ function BottomTabBar({ items }: { items: typeof managerNav }) {
           key={item.to}
           to={item.to}
           className={({ isActive }) =>
-            `flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-medium ${
+            `relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-medium ${
               isActive ? 'text-brand-600' : 'text-slate-400'
             }`
           }
         >
-          <item.icon size={20} />
+          <span className="relative">
+            <item.icon size={20} />
+            {item.to === '/admin/notifications' && pendingCount > 0 && (
+              <span className="absolute -right-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-500 text-[8px] font-bold text-white">
+                {pendingCount > 9 ? '9+' : pendingCount}
+              </span>
+            )}
+          </span>
           {item.label}
         </NavLink>
       ))}

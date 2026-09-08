@@ -9,15 +9,16 @@ import ManagerDashboard from '@/pages/ManagerDashboard'
 import AdminDashboard from '@/pages/AdminDashboard'
 import CalendarPage from '@/pages/CalendarPage'
 import ReportsPage from '@/pages/ReportsPage'
+import EventRequestPage from '@/pages/EventRequestPage'
 import ResourcesPage from '@/pages/ResourcesPage'
 import ProfilePage from '@/pages/ProfilePage'
 import ManagersPage from '@/pages/admin/ManagersPage'
 import ClubsPage from '@/pages/admin/ClubsPage'
 import AdminReportsPage from '@/pages/admin/AdminReportsPage'
+import EventRequestsAdminPage from '@/pages/admin/EventRequestsAdminPage'
+import NotificationsPage from '@/pages/admin/NotificationsPage'
 import NotFound from '@/pages/NotFound'
 import { FullScreenLoader } from '@/components/ui/FullScreenLoader'
-import EventRequestPage from '@/pages/EventRequestPage'
-import EventRequestsAdminPage from '@/pages/admin/EventRequestsAdminPage'
 
 function DashboardRouter() {
   const { profile, loading } = useAuth()

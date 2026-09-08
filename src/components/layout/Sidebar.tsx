@@ -1,11 +1,14 @@
 import { NavLink } from 'react-router-dom'
 import { CalendarClock, LogOut } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { usePendingNotificationsCount } from '@/hooks/useNotifications'
 import { managerNav, adminNav } from './navConfig'
 
 export function Sidebar() {
   const { profile, signOut } = useAuth()
-  const items = profile?.role === 'admin' ? adminNav : managerNav
+  const isAdmin = profile?.role === 'admin'
+  const items = isAdmin ? adminNav : managerNav
+  const { count: pendingCount } = usePendingNotificationsCount(isAdmin)
 
   return (
     <aside className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0 border-r border-slate-200 bg-white">
@@ -34,6 +37,11 @@ export function Sidebar() {
           >
             <item.icon size={18} strokeWidth={2} />
             {item.label}
+            {item.to === '/admin/notifications' && pendingCount > 0 && (
+              <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+                {pendingCount > 99 ? '99+' : pendingCount}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

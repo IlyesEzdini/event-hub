@@ -8,6 +8,7 @@ import {
   Settings,
   UserCircle,
   ClipboardList,
+  Bell,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -28,6 +29,7 @@ export const managerNav: NavItem[] = [
 
 export const adminNav: NavItem[] = [
   { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
+  { label: 'Notifications', to: '/admin/notifications', icon: Bell },
   { label: 'Calendar', to: '/calendar', icon: CalendarDays },
   { label: 'Reports', to: '/admin/reports', icon: FileText },
   { label: 'Event Requests', to: '/admin/event-requests', icon: ClipboardList },
