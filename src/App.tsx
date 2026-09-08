@@ -55,9 +55,8 @@ export default function App() {
               <Route path="/admin/event-requests" element={<EventRequestsAdminPage />} />
               <Route path="/admin/Notification" element={<NotificationsPage />} />
             </Route>
-            </Route>
+           </Route>
           </Route>
-        </Route>
 
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<NotFound />} />
