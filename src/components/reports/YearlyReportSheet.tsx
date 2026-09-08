@@ -154,6 +154,7 @@ export function YearlyReportSheet({
       )
       setCells((prev) => ({ ...prev, [cellKey(current.month, current.year)]: { ...cell, status: 'submitted' } }))
       toast.success(`Rapport de ${current.label} soumis.`)
+      notifyAdmin('report', current.label, saved.id)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Impossible de soumettre ce mois.')
     } finally {

@@ -53,6 +53,7 @@ export function EventForm({ clubId, clubs, event, createdByProfileId, onSuccess,
       } else {
         const created = await createEvent(payload, createdByProfileId)
         toast.success('Event added successfully.')
+        notifyAdmin('event', `${payload.event_name} — ${payload.event_date}`, created.id)
       }
       onSuccess()
     } catch (err) {

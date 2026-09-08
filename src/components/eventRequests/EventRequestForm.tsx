@@ -55,6 +55,7 @@ export function EventRequestForm({ clubId, submittedByProfileId, submittedByName
     try {
       const created = await createEventRequest({ club_id: clubId, ...form }, submittedByProfileId, submittedByName)
       toast.success('Demande d\'événement envoyée.')
+      notifyAdmin('event_request', form.objectifs || 'Nouvelle demande d\'événement', created.id)
       setForm(emptyForm())
       onSuccess()
     } catch (err) {
