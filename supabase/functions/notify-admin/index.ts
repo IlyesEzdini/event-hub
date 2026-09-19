@@ -15,7 +15,8 @@
 //   GMAIL_APP_PASSWORD  — a 16-char Google App Password (NOT your normal
 //                          Gmail password — requires 2FA enabled on the
 //                          account, generate at myaccount.google.com/apppasswords)
-//   ADMIN_EMAIL         — the coordinator's real inbox, e.g. you@example.com
+//   ADMIN_EMAIL         — the coordinator's inbox. Supports several,
+//                          comma-separated: "a@example.com,b@example.com"
 //   GMAIL_FROM_NAME      — optional display name, defaults to "EventHub"
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
@@ -60,7 +61,7 @@ async function sendEmail(
   gmailUser: string,
   gmailAppPassword: string,
   from: string,
-  to: string,
+  to: string | string[],
   subject: string,
   html: string,
 ) {
@@ -82,6 +83,10 @@ Deno.serve(async (req) => {
     const GMAIL_USER = Deno.env.get('GMAIL_USER')
     const GMAIL_APP_PASSWORD = Deno.env.get('GMAIL_APP_PASSWORD')
     const ADMIN_EMAIL = Deno.env.get('ADMIN_EMAIL')
+    // Supports one or several recipients: ADMIN_EMAIL="a@x.com,b@y.com"
+    const ADMIN_EMAILS = ADMIN_EMAIL
+      ? ADMIN_EMAIL.split(',').map((e) => e.trim()).filter(Boolean)
+      : []
     if (!GMAIL_USER) {
       console.error('❌ GMAIL_USER NOT FOUND')
     } else {
@@ -92,10 +97,10 @@ Deno.serve(async (req) => {
     } else {
       console.log('✅ GMAIL_APP_PASSWORD FOUND')
     }
-    if (!ADMIN_EMAIL) {
+    if (ADMIN_EMAILS.length === 0) {
       console.error('❌ ADMIN_EMAIL NOT FOUND')
     } else {
-      console.log('✅ ADMIN_EMAIL FOUND')
+      console.log(`✅ ADMIN_EMAIL FOUND (${ADMIN_EMAILS.length} recipient${ADMIN_EMAILS.length > 1 ? 's' : ''})`)
     }
 
     const FROM_NAME = Deno.env.get('GMAIL_FROM_NAME') ?? 'EventHub'
@@ -156,13 +161,13 @@ Deno.serve(async (req) => {
 
     // Email is best-effort: the notification row is already saved, so a
     // failure here never blocks or loses the manager's underlying action.
-    if (GMAIL_USER && GMAIL_APP_PASSWORD && ADMIN_EMAIL && FROM_EMAIL) {
+    if (GMAIL_USER && GMAIL_APP_PASSWORD && ADMIN_EMAILS.length > 0 && FROM_EMAIL) {
       try {
         await sendEmail(
           GMAIL_USER,
           GMAIL_APP_PASSWORD,
           FROM_EMAIL,
-          ADMIN_EMAIL,
+          ADMIN_EMAILS,
           `EventHub — ${profile.manager_name} ${ACTION_LABELS[action_type]}`,
           `
             <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
