@@ -1,41 +1,56 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent, Fragment } from 'react'
 import toast from 'react-hot-toast'
-import { Users, Plus, Pencil, KeyRound, Ban, CheckCircle2 } from 'lucide-react'
+import { Users, Plus, Pencil, KeyRound, Ban, CheckCircle2, UserPlus, Trash2, CornerDownRight } from 'lucide-react'
 import { useManagers } from '@/hooks/useManagers'
 import { useClubs } from '@/hooks/useClubs'
+import { useDeans } from '@/hooks/useDeans'
+import { useAssistants } from '@/hooks/useAssistants'
 import { createManager, replaceOrUpdateManager, updateManagerCredentials, setManagerActive } from '@/services/managers'
 import { findOrCreateClub } from '@/services/clubs'
+import { createAssistant, deleteAssistant } from '@/services/assistants'
 import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { TableRowSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
-import type { ProfileWithClub } from '@/types/database'
+import type { ProfileWithRelations, ProfileWithClub, Dean } from '@/types/database'
 
-type Modal_ = 'add' | 'edit' | 'credentials' | null
+type Modal_ = 'add' | 'edit' | 'credentials' | 'addAssistant' | null
 
 export default function ManagersPage() {
   const { managers, loading, reload } = useManagers()
   const { clubs, reload: reloadClubs } = useClubs()
+  const { deans } = useDeans()
+  const { assistants, loading: assistantsLoading, reload: reloadAssistants } = useAssistants()
+
   const [modal, setModal] = useState<Modal_>(null)
-  const [active, setActive] = useState<ProfileWithClub | null>(null)
-  const [toggleTarget, setToggleTarget] = useState<ProfileWithClub | null>(null)
+  const [active, setActive] = useState<ProfileWithRelations | null>(null)
+  const [toggleTarget, setToggleTarget] = useState<ProfileWithRelations | null>(null)
+  const [deleteAssistantTarget, setDeleteAssistantTarget] = useState<ProfileWithClub | null>(null)
+  const [assistantManagerPreselect, setAssistantManagerPreselect] = useState<string | null>(null)
 
   function openAdd() {
     setActive(null)
     setModal('add')
   }
-  function openEdit(m: ProfileWithClub) {
+  function openEdit(m: ProfileWithRelations) {
     setActive(m)
     setModal('edit')
   }
-  function openCredentials(m: ProfileWithClub) {
+  function openCredentials(m: ProfileWithRelations) {
     setActive(m)
     setModal('credentials')
+  }
+  function openAddAssistant(managerId: string | null = null) {
+    setAssistantManagerPreselect(managerId)
+    setModal('addAssistant')
   }
   function closeModal() {
     setModal(null)
     setActive(null)
+    setAssistantManagerPreselect(null)
   }
+
+  const assistantsByManager = (managerId: string) => assistants.filter((a) => a.assists_manager_id === managerId)
 
   return (
     <div className="space-y-6">
@@ -46,21 +61,28 @@ export default function ManagersPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-900">Managers</h1>
-            <p className="text-sm text-slate-500">{managers.length} accounts across {clubs.length} clubs</p>
+            <p className="text-sm text-slate-500">
+              {managers.length} managers · {assistants.length} assistants · {clubs.length} clubs
+            </p>
           </div>
         </div>
-        <button className="btn-primary" onClick={openAdd}>
-          <Plus size={16} /> Add Manager
-        </button>
+        <div className="flex gap-2">
+          <button className="btn-secondary" onClick={() => openAddAssistant(null)}>
+            <UserPlus size={16} /> Add Assistant
+          </button>
+          <button className="btn-primary" onClick={openAdd}>
+            <Plus size={16} /> Add Manager
+          </button>
+        </div>
       </div>
 
       <div className="card overflow-hidden">
-        {loading ? (
+        {loading || assistantsLoading ? (
           <table className="w-full">
             <tbody>
-              <TableRowSkeleton cols={5} />
-              <TableRowSkeleton cols={5} />
-              <TableRowSkeleton cols={5} />
+              <TableRowSkeleton cols={6} />
+              <TableRowSkeleton cols={6} />
+              <TableRowSkeleton cols={6} />
             </tbody>
           </table>
         ) : managers.length === 0 ? (
@@ -73,41 +95,67 @@ export default function ManagersPage() {
             <table className="hidden w-full text-sm sm:table">
               <thead className="border-b border-slate-100 bg-slate-50/70 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
                 <tr>
-                  <th className="px-4 py-3">Manager</th>
+                  <th className="px-4 py-3">Name</th>
                   <th className="px-4 py-3">Club</th>
                   <th className="px-4 py-3">Username</th>
                   <th className="hidden px-4 py-3 lg:table-cell">Phone</th>
                   <th className="hidden px-4 py-3 lg:table-cell">Email</th>
+                  <th className="hidden px-4 py-3 xl:table-cell">Dean</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {managers.map((m) => (
-                  <tr key={m.id}>
-                    <td className="px-4 py-3 font-medium text-slate-800">{m.manager_name}</td>
-                    <td className="px-4 py-3 text-slate-600">{m.club?.name ?? '—'}</td>
-                    <td className="px-4 py-3 text-slate-600">{m.username}</td>
-                    <td className="hidden px-4 py-3 text-slate-600 lg:table-cell">{m.phone_number ?? '—'}</td>
-                    <td className="hidden px-4 py-3 text-slate-600 lg:table-cell">{m.email ?? '—'}</td>
-                    <td className="px-4 py-3">
-                      <span className={`badge ${m.is_active ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' : 'bg-slate-100 text-slate-500 ring-1 ring-slate-200'}`}>
-                        {m.is_active ? 'Active' : 'Disabled'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end gap-1">
-                        <IconAction label="Edit" onClick={() => openEdit(m)} icon={Pencil} />
-                        <IconAction label="Change password" onClick={() => openCredentials(m)} icon={KeyRound} />
-                        <IconAction
-                          label={m.is_active ? 'Disable' : 'Enable'}
-                          onClick={() => setToggleTarget(m)}
-                          icon={m.is_active ? Ban : CheckCircle2}
-                          danger={m.is_active}
-                        />
-                      </div>
-                    </td>
-                  </tr>
+                  <Fragment key={m.id}>
+                    <tr>
+                      <td className="px-4 py-3 font-medium text-slate-800">{m.manager_name}</td>
+                      <td className="px-4 py-3 text-slate-600">{m.club?.name ?? '—'}</td>
+                      <td className="px-4 py-3 text-slate-600">{m.username}</td>
+                      <td className="hidden px-4 py-3 text-slate-600 lg:table-cell">{m.phone_number ?? '—'}</td>
+                      <td className="hidden px-4 py-3 text-slate-600 lg:table-cell">{m.email ?? '—'}</td>
+                      <td className="hidden px-4 py-3 text-slate-600 xl:table-cell">{m.dean?.name ?? '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className={`badge ${m.is_active ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' : 'bg-slate-100 text-slate-500 ring-1 ring-slate-200'}`}>
+                          {m.is_active ? 'Active' : 'Disabled'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end gap-1">
+                          <IconAction label="Add assistant" onClick={() => openAddAssistant(m.id)} icon={UserPlus} />
+                          <IconAction label="Edit" onClick={() => openEdit(m)} icon={Pencil} />
+                          <IconAction label="Change password" onClick={() => openCredentials(m)} icon={KeyRound} />
+                          <IconAction
+                            label={m.is_active ? 'Disable' : 'Enable'}
+                            onClick={() => setToggleTarget(m)}
+                            icon={m.is_active ? Ban : CheckCircle2}
+                            danger={m.is_active}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                    {assistantsByManager(m.id).map((a) => (
+                      <tr key={a.id} className="bg-slate-50/50">
+                        <td className="px-4 py-2 pl-8 text-xs text-slate-500">
+                          <span className="flex items-center gap-1.5">
+                            <CornerDownRight size={12} className="text-slate-300" />
+                            {a.manager_name}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-xs text-slate-400">{a.club?.name ?? '—'}</td>
+                        <td className="px-4 py-2 text-xs text-slate-400">assistant</td>
+                        <td className="hidden px-4 py-2 text-xs text-slate-400 lg:table-cell">{a.phone_number ?? '—'}</td>
+                        <td className="hidden px-4 py-2 text-xs text-slate-400 lg:table-cell">{a.email ?? '—'}</td>
+                        <td className="hidden px-4 py-2 xl:table-cell" />
+                        <td className="px-4 py-2" />
+                        <td className="px-4 py-2">
+                          <div className="flex justify-end">
+                            <IconAction label="Remove assistant" onClick={() => setDeleteAssistantTarget(a)} icon={Trash2} danger />
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -125,17 +173,38 @@ export default function ManagersPage() {
                           {[m.phone_number, m.email].filter(Boolean).join(' · ')}
                         </p>
                       )}
+                      {m.dean?.name && <p className="mt-0.5 text-xs text-slate-400">Dean: {m.dean.name}</p>}
                     </div>
                     <span className={`badge ${m.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
                       {m.is_active ? 'Active' : 'Disabled'}
                     </span>
                   </div>
-                  <div className="flex gap-2">
+
+                  {assistantsByManager(m.id).length > 0 && (
+                    <ul className="mb-2 space-y-1 rounded-lg bg-slate-50 p-2">
+                      {assistantsByManager(m.id).map((a) => (
+                        <li key={a.id} className="flex items-center justify-between text-xs text-slate-500">
+                          <span className="flex items-center gap-1.5">
+                            <CornerDownRight size={11} className="text-slate-300" />
+                            {a.manager_name}
+                          </span>
+                          <button onClick={() => setDeleteAssistantTarget(a)} className="text-slate-400 hover:text-rose-600">
+                            <Trash2 size={12} />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
                     <button className="btn-secondary flex-1 text-xs" onClick={() => openEdit(m)}>
                       Edit
                     </button>
                     <button className="btn-secondary flex-1 text-xs" onClick={() => openCredentials(m)}>
                       Password
+                    </button>
+                    <button className="btn-secondary flex-1 text-xs" onClick={() => openAddAssistant(m.id)}>
+                      + Assistant
                     </button>
                     <button
                       className={`btn-secondary flex-1 text-xs ${m.is_active ? 'text-rose-600' : 'text-emerald-600'}`}
@@ -154,6 +223,7 @@ export default function ManagersPage() {
       <Modal open={modal === 'add'} onClose={closeModal} title="Add Manager">
         <AddManagerForm
           clubs={clubs}
+          deans={deans}
           onCreated={() => {
             closeModal()
             reload()
@@ -167,6 +237,7 @@ export default function ManagersPage() {
           <EditManagerForm
             manager={active}
             clubs={clubs}
+            deans={deans}
             onSaved={() => {
               closeModal()
               reload()
@@ -184,6 +255,17 @@ export default function ManagersPage() {
             }}
           />
         )}
+      </Modal>
+
+      <Modal open={modal === 'addAssistant'} onClose={closeModal} title="Add Assistant">
+        <AddAssistantForm
+          managers={managers}
+          preselectManagerId={assistantManagerPreselect}
+          onCreated={() => {
+            closeModal()
+            reloadAssistants()
+          }}
+        />
       </Modal>
 
       <ConfirmDialog
@@ -208,6 +290,26 @@ export default function ManagersPage() {
         }
         confirmLabel={toggleTarget?.is_active ? 'Disable' : 'Enable'}
         danger={!!toggleTarget?.is_active}
+      />
+
+      <ConfirmDialog
+        open={!!deleteAssistantTarget}
+        onClose={() => setDeleteAssistantTarget(null)}
+        onConfirm={async () => {
+          if (!deleteAssistantTarget) return
+          try {
+            await deleteAssistant(deleteAssistantTarget.id)
+            toast.success('Assistant removed.')
+            setDeleteAssistantTarget(null)
+            reloadAssistants()
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Unable to remove this assistant.')
+          }
+        }}
+        title="Remove assistant?"
+        message={`${deleteAssistantTarget?.manager_name} will be permanently removed. This cannot be undone.`}
+        confirmLabel="Remove"
+        danger
       />
     </div>
   )
@@ -236,7 +338,15 @@ function IconAction({
   )
 }
 
-function AddManagerForm({ clubs, onCreated }: { clubs: { id: string; name: string }[]; onCreated: () => void }) {
+function AddManagerForm({
+  clubs,
+  deans,
+  onCreated,
+}: {
+  clubs: { id: string; name: string }[]
+  deans: Dean[]
+  onCreated: () => void
+}) {
   const [managerName, setManagerName] = useState('')
   const [clubMode, setClubMode] = useState<'existing' | 'new'>('existing')
   const [clubId, setClubId] = useState('')
@@ -244,6 +354,7 @@ function AddManagerForm({ clubs, onCreated }: { clubs: { id: string; name: strin
   const [username, setUsername] = useState('')
   const [phoneNumber, setPhoneNumber] = useState('')
   const [contactEmail, setContactEmail] = useState('')
+  const [deanId, setDeanId] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -273,6 +384,7 @@ function AddManagerForm({ clubs, onCreated }: { clubs: { id: string; name: strin
         club_id: resolvedClubId,
         phone_number: phoneNumber.trim() || undefined,
         email: contactEmail.trim() || undefined,
+        dean_id: deanId || undefined,
       })
       toast.success('Manager added successfully.')
       onCreated()
@@ -316,6 +428,18 @@ function AddManagerForm({ clubs, onCreated }: { clubs: { id: string; name: strin
       </div>
 
       <div>
+        <label className="label">Dean</label>
+        <select className="input" value={deanId} onChange={(e) => setDeanId(e.target.value)}>
+          <option value="">No dean</option>
+          {deans.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
         <label className="label">Username</label>
         <input className="input" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="ahmed" />
       </div>
@@ -348,16 +472,19 @@ function AddManagerForm({ clubs, onCreated }: { clubs: { id: string; name: strin
 function EditManagerForm({
   manager,
   clubs,
+  deans,
   onSaved,
 }: {
-  manager: ProfileWithClub
+  manager: ProfileWithRelations
   clubs: { id: string; name: string }[]
+  deans: Dean[]
   onSaved: () => void
 }) {
   const [managerName, setManagerName] = useState(manager.manager_name)
-  const [username, setUsername] = useState(manager.username)
+  const [username, setUsername] = useState(manager.username ?? '')
   const [phoneNumber, setPhoneNumber] = useState(manager.phone_number ?? '')
   const [contactEmail, setContactEmail] = useState(manager.email ?? '')
+  const [deanId, setDeanId] = useState(manager.dean_id ?? '')
   const [clubId, setClubId] = useState(manager.club_id ?? '')
   const [submitting, setSubmitting] = useState(false)
 
@@ -372,6 +499,7 @@ function EditManagerForm({
         club_id: clubId || undefined,
         phone_number: phoneNumber.trim(),
         email: contactEmail.trim(),
+        dean_id: deanId,
       })
       toast.success('Manager updated successfully.')
       onSaved()
@@ -402,6 +530,17 @@ function EditManagerForm({
         </select>
       </div>
       <div>
+        <label className="label">Dean</label>
+        <select className="input" value={deanId} onChange={(e) => setDeanId(e.target.value)}>
+          <option value="">No dean</option>
+          {deans.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
         <label className="label">Username</label>
         <input className="input" value={username} onChange={(e) => setUsername(e.target.value)} />
       </div>
@@ -424,7 +563,7 @@ function EditManagerForm({
   )
 }
 
-function CredentialsForm({ manager, onSaved }: { manager: ProfileWithClub; onSaved: () => void }) {
+function CredentialsForm({ manager, onSaved }: { manager: ProfileWithRelations; onSaved: () => void }) {
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -461,6 +600,87 @@ function CredentialsForm({ manager, onSaved }: { manager: ProfileWithClub; onSav
       <div className="flex justify-end gap-2 pt-2">
         <button type="submit" className="btn-primary" disabled={submitting}>
           {submitting ? 'Updating…' : 'Update password'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
+function AddAssistantForm({
+  managers,
+  preselectManagerId,
+  onCreated,
+}: {
+  managers: ProfileWithRelations[]
+  preselectManagerId: string | null
+  onCreated: () => void
+}) {
+  const [assistantName, setAssistantName] = useState('')
+  const [managerId, setManagerId] = useState(preselectManagerId ?? '')
+  const [phoneNumber, setPhoneNumber] = useState('')
+  const [contactEmail, setContactEmail] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    setError(null)
+    if (!assistantName.trim() || !managerId) {
+      setError('Assistant name and manager are required.')
+      return
+    }
+    setSubmitting(true)
+    try {
+      await createAssistant({
+        assistant_name: assistantName.trim(),
+        manager_profile_id: managerId,
+        phone_number: phoneNumber.trim() || undefined,
+        email: contactEmail.trim() || undefined,
+      })
+      toast.success('Assistant added successfully.')
+      onCreated()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unable to create this assistant.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {error && <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+      <p className="rounded-xl bg-brand-50 px-3 py-2 text-xs text-brand-700">
+        Assistants have no login — this only adds them to the directory under the manager you pick, using that
+        manager's club automatically.
+      </p>
+      <div>
+        <label className="label">Assistant Name</label>
+        <input className="input" value={assistantName} onChange={(e) => setAssistantName(e.target.value)} placeholder="Sami Trabelsi" />
+      </div>
+      <div>
+        <label className="label">Manager</label>
+        <select className="input" value={managerId} onChange={(e) => setManagerId(e.target.value)}>
+          <option value="">Select a manager…</option>
+          {managers.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.manager_name} ({m.club?.name ?? '—'})
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Phone Number</label>
+          <input className="input" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="+216 XX XXX XXX" />
+        </div>
+        <div>
+          <label className="label">Email</label>
+          <input type="email" className="input" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="sami@example.com" />
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 pt-2">
+        <button type="submit" className="btn-primary" disabled={submitting}>
+          {submitting ? 'Creating…' : 'Add assistant'}
         </button>
       </div>
     </form>

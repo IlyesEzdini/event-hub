@@ -1,6 +1,7 @@
-// Domain types mirroring the Supabase schema (see supabase/schema.sql)
+// Domain types mirroring the Supabase schema (see supabase/schema.sql and
+// supabase/migrations/*.sql)
 
-export type Role = 'admin' | 'manager'
+export type Role = 'admin' | 'manager' | 'assistant'
 
 export interface Club {
   id: string
@@ -8,14 +9,26 @@ export interface Club {
   created_at: string
 }
 
+export interface Dean {
+  id: string
+  name: string
+  email: string | null
+  created_at: string
+}
+
 export interface Profile {
   id: string
-  auth_user_id: string
+  // null for assistants — they have no Supabase Auth account / no login.
+  auth_user_id: string | null
   manager_name: string
-  username: string
+  // null for assistants.
+  username: string | null
   phone_number: string | null
   email: string | null
   club_id: string | null
+  dean_id: string | null
+  // set only for assistants: which manager's profile.id they belong to.
+  assists_manager_id: string | null
   role: Role
   is_active: boolean
   created_at: string
@@ -24,6 +37,11 @@ export interface Profile {
 
 export interface ProfileWithClub extends Profile {
   club: Club | null
+}
+
+export interface ProfileWithRelations extends Profile {
+  club: Club | null
+  dean: Dean | null
 }
 
 export interface EventItem {

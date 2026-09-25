@@ -6,12 +6,15 @@
 // the service role key only as a function secret, and is the single place
 // privileged account-management operations happen.
 //
+// Assistants are NOT handled here — they have no login at all, so they're
+// created with a plain (RLS-protected) table insert from the frontend
+// (see src/services/assistants.ts). This function is only for real
+// accounts: the admin and managers.
+//
 // Deploy with:
 //   supabase functions deploy manage-manager
 // Set secrets with:
 //   supabase secrets set SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=...
-// (SUPABASE_URL / SUPABASE_ANON_KEY are already provided automatically in
-// the Edge Function runtime; SUPABASE_SERVICE_ROLE_KEY must be set manually.)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
 
@@ -45,7 +48,6 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get('Authorization') ?? ''
     if (!authHeader) return json({ error: 'Missing Authorization header' }, 401)
 
-    // Client scoped to the CALLER's JWT — used only to verify who is calling.
     const callerClient = createClient(SUPABASE_URL, ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
     })
@@ -64,14 +66,21 @@ Deno.serve(async (req) => {
       return json({ error: 'Only the admin can manage manager accounts.' }, 403)
     }
 
-    // Elevated client — only used after the admin check above.
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
 
     const body = await req.json()
     const { action } = body
 
     if (action === 'create') {
-      const { manager_name, username, password, club_id, phone_number, email: contactEmail } = body
+      const {
+        manager_name,
+        username,
+        password,
+        club_id,
+        phone_number,
+        email: contactEmail,
+        dean_id,
+      } = body
       if (!manager_name || !username || !password || !club_id) {
         return json({ error: 'manager_name, username, password and club_id are required.' }, 400)
       }
@@ -92,13 +101,13 @@ Deno.serve(async (req) => {
           phone_number: phone_number ?? null,
           email: contactEmail ?? null,
           club_id,
+          dean_id: dean_id ?? null,
           role: 'manager',
         })
-        .select('*, club:clubs(*)')
+        .select('*, club:clubs(*), dean:deans(*)')
         .single()
 
       if (profileError) {
-        // Roll back the auth user so we don't leave an orphaned account.
         await admin.auth.admin.deleteUser(created.user.id)
         return json({ error: profileError.message }, 400)
       }
@@ -106,10 +115,15 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'replace' || action === 'updateProfile') {
-      // Rename the manager assigned to a club (or edit their display name),
-      // WITHOUT touching club_id on any historical events/reports — those
-      // stay linked to the club, not the manager.
-      const { profile_id, manager_name, username, club_id, phone_number, email: contactEmail } = body
+      const {
+        profile_id,
+        manager_name,
+        username,
+        club_id,
+        phone_number,
+        email: contactEmail,
+        dean_id,
+      } = body
       if (!profile_id) return json({ error: 'profile_id is required.' }, 400)
 
       const { data: existingProfile, error: findError } = await admin
@@ -124,6 +138,7 @@ Deno.serve(async (req) => {
       if (club_id) updates.club_id = club_id
       if (phone_number !== undefined) updates.phone_number = phone_number || null
       if (contactEmail !== undefined) updates.email = contactEmail || null
+      if (dean_id !== undefined) updates.dean_id = dean_id || null
       if (username && username !== existingProfile.username) {
         const newEmail = usernameToEmail(username)
         const { error: emailError } = await admin.auth.admin.updateUserById(existingProfile.auth_user_id, {
@@ -137,7 +152,7 @@ Deno.serve(async (req) => {
         .from('profiles')
         .update(updates)
         .eq('id', profile_id)
-        .select('*, club:clubs(*)')
+        .select('*, club:clubs(*), dean:deans(*)')
         .single()
       if (updateError) return json({ error: updateError.message }, 400)
       return json({ profile })
@@ -173,8 +188,6 @@ Deno.serve(async (req) => {
         .single()
       if (findError || !existingProfile) return json({ error: 'Manager not found.' }, 404)
 
-      // Ban/unban in Supabase Auth so a disabled manager truly cannot sign in,
-      // in addition to flagging is_active for UI purposes.
       await admin.auth.admin.updateUserById(existingProfile.auth_user_id, {
         ban_duration: is_active ? 'none' : '87600h',
       })
@@ -182,7 +195,7 @@ Deno.serve(async (req) => {
         .from('profiles')
         .update({ is_active })
         .eq('id', profile_id)
-        .select('*, club:clubs(*)')
+        .select('*, club:clubs(*), dean:deans(*)')
         .single()
       if (updateError) return json({ error: updateError.message }, 400)
       return json({ profile })
