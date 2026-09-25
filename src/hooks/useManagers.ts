@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { listManagers } from '@/services/managers'
-import type { ProfileWithClub } from '@/types/database'
+import type { ProfileWithRelations } from '@/types/database'
 
 export function useManagers() {
-  const [managers, setManagers] = useState<ProfileWithClub[]>([])
+  const [managers, setManagers] = useState<ProfileWithRelations[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 

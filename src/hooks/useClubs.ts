@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { listManagers } from '@/services/managers'
-import type { ProfileWithRelations } from '@/types/database'
+import { listClubs } from '@/services/clubs'
+import type { Club } from '@/types/database'
 
-export function useManagers() {
-  const [managers, setManagers] = useState<ProfileWithRelations[]>([])
+export function useClubs() {
+  const [clubs, setClubs] = useState<Club[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -11,9 +11,9 @@ export function useManagers() {
     setLoading(true)
     setError(null)
     try {
-      setManagers(await listManagers())
+      setClubs(await listClubs())
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load managers')
+      setError(e instanceof Error ? e.message : 'Failed to load clubs')
     } finally {
       setLoading(false)
     }
@@ -23,5 +23,5 @@ export function useManagers() {
     reload()
   }, [reload])
 
-  return { managers, loading, error, reload }
+  return { clubs, loading, error, reload }
 }
