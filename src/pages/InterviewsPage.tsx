@@ -31,14 +31,14 @@ const DEPARTMENTS: { value: InterviewDepartment; label: string }[] = [
   { value: 'PAP', label: 'PAP' },
 ]
 
-function requiredCoordinatorField(
+function getRequiredCoordinatorField(
   poste: InterviewPoste,
-  department: InterviewDepartment,
-): CoordinatorField {
-  if (poste === 'president' || poste === 'vice_president') return 'regional'
-  // The requested coordinator table has no `event` field, so event interviews
-  // use the regional coordinator as the fallback.
-  if (department === 'event') return 'regional'
+  department: InterviewDepartment
+) {
+  if (poste === 'president' || poste === 'vice_president') {
+    return 'regional'
+  }
+
   return department
 }
 
