@@ -14,7 +14,7 @@ export interface InterviewInput {
   place: string
   poste: InterviewPoste
   department: InterviewDepartment
-  coordinator_emails: string
+  coordinator_emails: string[]
 }
 
 export async function listInterviews(): Promise<InterviewWithClub[]> {
@@ -48,7 +48,7 @@ export async function createInterview(input: {
       place: input.place,
       poste: input.poste,
       department: input.department,
-      coordinator_emails: input.coordinator_emails,
+      coordinator_emails: [input.coordinator_emails],
       status: 'pending',
     })
     .select('*, club:clubs(*)')
