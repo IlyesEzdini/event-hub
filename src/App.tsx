@@ -6,6 +6,8 @@ import { useAuth } from '@/contexts/AuthContext'
 
 import Login from '@/pages/Login'
 import ManagerDashboard from '@/pages/ManagerDashboard'
+import DeanDashboard from '@/pages/DeanDashboard'
+import InterviewsPage from '@/pages/InterviewsPage'
 import AdminDashboard from '@/pages/AdminDashboard'
 import CalendarPage from '@/pages/CalendarPage'
 import ReportsPage from '@/pages/ReportsPage'
@@ -23,7 +25,10 @@ import { FullScreenLoader } from '@/components/ui/FullScreenLoader'
 function DashboardRouter() {
   const { profile, loading } = useAuth()
   if (loading || !profile) return <FullScreenLoader />
-  return profile.role === 'admin' ? <AdminDashboard /> : <ManagerDashboard />
+  if (profile.role === 'admin') return <AdminDashboard />
+  if (profile.role === 'dean') return <DeanDashboard />
+  if (profile.role === 'coordinator') return <Navigate to="/interviews" replace />
+  return <ManagerDashboard />
 }
 
 export default function App() {
@@ -43,10 +48,20 @@ export default function App() {
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<DashboardRouter />} />
             <Route path="/calendar" element={<CalendarPage />} />
-            <Route path="/reports" element={<ReportsPage />} />
-            <Route path="/event-request" element={<EventRequestPage />} />
-            <Route path="/resources" element={<ResourcesPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
+
+            <Route element={<ProtectedRoute allowedRoles={['manager']} />}>
+              <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/event-request" element={<EventRequestPage />} />
+              <Route path="/resources" element={<ResourcesPage />} />
+            </Route>
+
+            <Route element={<ProtectedRoute allowedRoles={['admin', 'manager', 'dean']} />}>
+              <Route path="/profile" element={<ProfilePage />} />
+            </Route>
+
+            <Route element={<ProtectedRoute allowedRoles={['dean', 'coordinator','admin']} />}>
+              <Route path="/interviews" element={<InterviewsPage />} />
+            </Route>
 
             <Route element={<ProtectedRoute adminOnly />}>
               <Route path="/admin/managers" element={<ManagersPage />} />
