@@ -31,7 +31,7 @@ const DEPARTMENTS: { value: InterviewDepartment; label: string }[] = [
   { value: 'PAP', label: 'PAP' },
 ]
 
-function getRequiredCoordinatorField(
+function requiredCoordinatorField(
   poste: InterviewPoste,
   department: InterviewDepartment
 ) {
