@@ -3,13 +3,19 @@ import { NavLink } from 'react-router-dom'
 import { CalendarClock, LogOut, Menu, X } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePendingNotificationsCount } from '@/hooks/useNotifications'
-import { managerNav, adminNav } from './navConfig'
+import { managerNav, adminNav, deanNav, coordinatorNav } from './navConfig'
 
 export function MobileTopbar() {
   const [open, setOpen] = useState(false)
   const { profile, signOut } = useAuth()
   const isAdmin = profile?.role === 'admin'
-  const items = isAdmin ? adminNav : managerNav
+  const items = isAdmin
+    ? adminNav
+    : profile?.role === 'dean'
+      ? deanNav
+      : profile?.role === 'coordinator'
+        ? coordinatorNav
+        : managerNav
   const { count: pendingCount } = usePendingNotificationsCount(isAdmin)
 
   return (
@@ -48,7 +54,7 @@ export function MobileTopbar() {
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-slate-800">{profile?.manager_name}</p>
                 <p className="truncate text-xs text-slate-500">
-                  {profile?.role === 'admin' ? 'Administrator' : profile?.club?.name ?? 'No club'}
+                  {profile?.role === 'admin' ? 'Administrator' : profile?.role === 'dean' ? 'Dean' : profile?.role === 'coordinator' ? `Coordinator · ${profile.field}` : profile?.club?.name ?? 'No club'}
                 </p>
               </div>
             </div>

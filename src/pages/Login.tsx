@@ -33,7 +33,7 @@ export default function Login() {
             <CalendarClock size={26} />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">EventHub</h1>
-          <p className="mt-1 text-sm text-slate-500">Sign in to coordinate your club's events</p>
+          <p className="mt-1 text-sm text-slate-500">Sign in to EventHub</p>
         </div>
 
         <form onSubmit={handleSubmit} className="card p-6 sm:p-8">
@@ -46,14 +46,14 @@ export default function Login() {
 
           <div className="mb-4">
             <label htmlFor="username" className="label">
-              Username
+              Username or coordinator email
             </label>
             <input
               id="username"
               type="text"
               autoComplete="username"
               className="input"
-              placeholder="e.g. ahmed"
+              placeholder="e.g. ahmed or coordinator@example.com"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               autoFocus
@@ -97,7 +97,7 @@ export default function Login() {
         </form>
 
         <p className="mt-6 text-center text-xs text-slate-400">
-          Access is managed by your event coordinator. Contact your admin if you need an account.
+          Accounts are managed manually by the EventHub administrator. Coordinators can sign in with the email stored in their coordinator account.
         </p>
       </div>
     </div>

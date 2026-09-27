@@ -1,14 +1,13 @@
-// Domain types mirroring the Supabase schema (see supabase/schema.sql and
-// supabase/migrations/*.sql)
 
-export type Role = 'admin' | 'manager' | 'assistant'
+export type Role = 'admin' | 'manager' | 'assistant' | 'dean' | 'coordinator'
+
+export type CoordinatorField = 'COM' | 'RH' | 'partenariat' | 'PAP' | 'regional'
 
 export interface Club {
   id: string
   name: string
   created_at: string
 }
-
 export interface Dean {
   id: string
   name: string
@@ -26,9 +25,16 @@ export interface Profile {
   phone_number: string | null
   email: string | null
   club_id: string | null
+  // for a manager: the referenced public.deans.id they report to.
   dean_id: string | null
   // set only for assistants: which manager's profile.id they belong to.
   assists_manager_id: string | null
+  // for a dean: the club NAMES they oversee (matched against clubs.name).
+  responsible_clubs: string[]
+  // JSON array stored on dean profiles, e.g. ["FDS", "LETTRE"].
+  clubs: string[]
+  // for a coordinator profile in legacy data; new coordinators use the separate table.
+  field: CoordinatorField | null
   role: Role
   is_active: boolean
   created_at: string
@@ -37,8 +43,8 @@ export interface Profile {
 
 export interface ProfileWithClub extends Profile {
   club: Club | null
+  dean: Dean | null
 }
-
 export interface ProfileWithRelations extends Profile {
   club: Club | null
   dean: Dean | null
@@ -89,4 +95,40 @@ export interface DocumentResource {
   file_path: string
   uploaded_by: string | null
   created_at: string
+}
+
+export type InterviewPoste = 'manager' | 'assistant' | 'president' | 'vice_president'
+export type InterviewDepartment = 'event' | 'COM' | 'RH' | 'partenariat' | 'PAP'
+export type InterviewStatus = 'pending' | 'done'
+
+export interface Coordinator {
+  email: string
+  username: string
+  field: CoordinatorField
+}
+
+export interface Interview {
+  id: string
+  dean_profile_id: string
+  club_id: string
+  interview_date: string
+  interview_time: string
+  place: string
+  poste: InterviewPoste
+  department: InterviewDepartment
+  coordinator_email: string
+  status: InterviewStatus
+  created_at: string
+  updated_at: string
+}
+
+export interface InterviewWithClub extends Interview {
+  club: Club | null
+}
+
+export interface CurrentUser extends Omit<ProfileWithClub, 'id' | 'auth_user_id' | 'created_at' | 'updated_at'> {
+  id: string | null
+  auth_user_id: string
+  created_at: string | null
+  updated_at: string | null
 }

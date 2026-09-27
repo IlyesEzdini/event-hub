@@ -97,3 +97,15 @@ export async function deleteEvent(
     throw error
   }
 }
+export async function listEventsForClubs(clubIds: string[]): Promise<EventWithClub[]> {
+  if (clubIds.length === 0) return []
+  const { data, error } = await supabase
+    .from('events')
+    .select('*, club:clubs(*)')
+    .in('club_id', clubIds)
+    .order('event_date', { ascending: true })
+    .order('event_timing', { ascending: true })
+
+  if (error) throw error
+  return data as EventWithClub[]
+}

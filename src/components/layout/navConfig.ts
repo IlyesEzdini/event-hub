@@ -9,6 +9,7 @@ import {
   UserCircle,
   ClipboardList,
   Bell,
+  ClipboardCheck,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -37,4 +38,15 @@ export const adminNav: NavItem[] = [
   { label: 'Clubs', to: '/admin/clubs', icon: Building2 },
   { label: 'Resources', to: '/resources', icon: FolderOpen },
   { label: 'Settings', to: '/profile', icon: Settings },
+]
+
+export const deanNav: NavItem[] = [
+  { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
+  { label: 'Calendar', to: '/calendar', icon: CalendarDays },
+  { label: 'Interviews', to: '/interviews', icon: ClipboardCheck },
+]
+
+export const coordinatorNav: NavItem[] = [
+  { label: 'Calendar', to: '/calendar', icon: CalendarDays },
+  { label: 'Interviews', to: '/interviews', icon: ClipboardCheck },
 ]

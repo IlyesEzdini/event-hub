@@ -22,9 +22,11 @@ export default function CalendarPage() {
   const [deleting, setDeleting] = useState(false)
 
   const isAdmin = profile?.role === 'admin'
+  const isManager = profile?.role === 'manager'
+  const canCreateEvents = isAdmin || isManager
 
   function canManage(event: EventWithClub) {
-    return isAdmin || event.club_id === profile?.club_id
+    return isAdmin || (isManager && event.club_id === profile?.club_id)
   }
 
   function openCreate() {
@@ -64,9 +66,11 @@ export default function CalendarPage() {
             <p className="text-sm text-slate-500">Every club's events in one place</p>
           </div>
         </div>
-        <button onClick={openCreate} className="btn-primary">
-          <Plus size={16} /> Add Event
-        </button>
+        {canCreateEvents && (
+          <button onClick={openCreate} className="btn-primary">
+            <Plus size={16} /> Add Event
+          </button>
+        )}
       </div>
 
       {loading ? (

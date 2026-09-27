@@ -164,3 +164,16 @@ export async function listReportsForClubYear(
 
   return data as Report[]
 }
+export async function listReportsForClubs(clubIds: string[]): Promise<ReportWithClub[]> {
+  if (clubIds.length === 0) return []
+  const { data, error } = await supabase
+    .from('reports')
+    .select('*, club:clubs(*)')
+    .in('club_id', clubIds)
+    .eq('status', 'submitted')
+    .order('year', { ascending: false })
+    .order('month', { ascending: false })
+
+  if (error) throw error
+  return data as ReportWithClub[]
+}
