@@ -117,14 +117,14 @@ Deno.serve(async (req) => {
       .from('interviews')
       .select(`
         id,
-        dean_profile_id,
+        dean_id,
         club_id,
         interview_date,
         interview_time,
         place,
         poste,
         department,
-        coordinator_email,
+        coordinator_emails,
         status,
         club:clubs(name),
         dean:profiles!interviews_dean_profile_id_fkey(manager_name, email)

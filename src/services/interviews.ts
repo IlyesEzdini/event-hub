@@ -28,42 +28,66 @@ export async function listInterviews(): Promise<InterviewWithClub[]> {
   return data as InterviewWithClub[]
 }
 
-export async function createInterview(input: any) {
-  console.log('========== createInterview() ==========')
-  console.log('Input received:', input)
-
-  const payload = {
-    dean_profile_id: input.dean_profile_id,
-    club_id: input.club_id,
-    interview_date: input.interview_date,
-    interview_time: input.interview_time,
-    place: input.place,
-    poste: input.poste,
-    department: input.department,
-    coordinator_email: input.coordinator_email,
-  }
-
-  console.log('Supabase INSERT payload:', payload)
-
+export async function createInterview(input: {
+  dean_id: string
+  club_id: string
+  interview_date: string
+  interview_time: string
+  place: string
+  poste: string
+  department: string
+  coordinator_emails: string[]
+}) {
+  // 1. Create the interview
   const { data, error } = await supabase
     .from('interviews')
-    .insert(payload)
-    .select()
+    .insert({
+      dean_id: input.dean_id,
+      club_id: input.club_id,
+      interview_date: input.interview_date,
+      interview_time: input.interview_time,
+      place: input.place,
+      poste: input.poste,
+      department: input.department,
+      coordinator_emails: input.coordinator_emails,
+      status: 'pending',
+    })
+    .select('*, club:clubs(*)')
     .single()
 
   if (error) {
-    console.error('❌ SUPABASE INSERT FAILED')
-    console.error('Code:', error.code)
-    console.error('Message:', error.message)
-    console.error('Details:', error.details)
-    console.error('Hint:', error.hint)
-    console.error('Full error:', error)
-
+    console.error('Interview INSERT failed:', error)
     throw error
   }
 
-  console.log('✅ SUPABASE INSERT SUCCESS')
-  console.log('Inserted interview:', data)
+  console.log('Interview created:', data)
+
+  // 2. Notify the coordinator
+  const { data: notificationData, error: notificationError } =
+    await supabase.functions.invoke('notify-interviewer', {
+      body: {
+        interview_id: data.id,
+      },
+    })
+
+  if (notificationError) {
+    console.error(
+      'notify-interviewer failed:',
+      notificationError
+    )
+
+    // IMPORTANT:
+    // The interview was already created successfully.
+    // Don't delete it just because email failed.
+    console.warn(
+      'Interview created, but coordinator notification failed.'
+    )
+  } else {
+    console.log(
+      'Coordinator notification sent:',
+      notificationData
+    )
+  }
 
   return data
 }
