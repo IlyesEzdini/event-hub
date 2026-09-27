@@ -55,7 +55,7 @@ export default function AdminDashboard() {
       </div>
 
       <div className="card p-5">
-        <h2 className="mb-4 text-sm font-bold text-slate-900">Report Completion — This Month</h2>
+        <h2 className="mb-4 text-sm font-bold text-slate-900">Report Completion — this Month</h2>
         {loading ? (
           <CardSkeleton />
         ) : (
