@@ -28,16 +28,7 @@ export async function listInterviews(): Promise<InterviewWithClub[]> {
   return data as InterviewWithClub[]
 }
 
-export async function createInterview(input: {
-  dean_id: string
-  club_id: string
-  interview_date: string
-  interview_time: string
-  place: string
-  poste: string
-  department: string
-  coordinator_emails: string[]
-}) {
+export async function createInterview(input:any) {
   // 1. Create the interview
   const { data, error } = await supabase
     .from('interviews')
