@@ -28,28 +28,44 @@ export async function listInterviews(): Promise<InterviewWithClub[]> {
   return data as InterviewWithClub[]
 }
 
-export async function createInterview(input: InterviewInput): Promise<InterviewWithClub> {
+export async function createInterview(input: any) {
+  console.log('========== createInterview() ==========')
+  console.log('Input received:', input)
+
+  const payload = {
+    dean_profile_id: input.dean_profile_id,
+    club_id: input.club_id,
+    interview_date: input.interview_date,
+    interview_time: input.interview_time,
+    place: input.place,
+    poste: input.poste,
+    department: input.department,
+    coordinator_email: input.coordinator_email,
+  }
+
+  console.log('Supabase INSERT payload:', payload)
+
   const { data, error } = await supabase
     .from('interviews')
-    .insert(input)
-    .select('*, club:clubs(*)')
+    .insert(payload)
+    .select()
     .single()
 
-  if (error) throw error
+  if (error) {
+    console.error('❌ SUPABASE INSERT FAILED')
+    console.error('Code:', error.code)
+    console.error('Message:', error.message)
+    console.error('Details:', error.details)
+    console.error('Hint:', error.hint)
+    console.error('Full error:', error)
 
-  const interview = data as InterviewWithClub
+    throw error
+  }
 
-  // The interview is already persisted. Email delivery is intentionally
-  // non-blocking so SMTP failure cannot roll back the interview.
-  void supabase.functions
-    .invoke('notify-interviewer', {
-      body: { interview_id: interview.id },
-    })
-    .then(({ error: notifyError }) => {
-      if (notifyError) console.error('notify-interviewer failed:', notifyError)
-    })
+  console.log('✅ SUPABASE INSERT SUCCESS')
+  console.log('Inserted interview:', data)
 
-  return interview
+  return data
 }
 
 export async function updateInterview(
