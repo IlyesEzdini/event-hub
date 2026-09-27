@@ -100,7 +100,7 @@ export default function InterviewsPage() {
           place: input.place,
           poste: input.poste,
           department: input.department,
-          coordinator_emails: input.coordinator_email,
+          coordinator_emails: [input.coordinator_email],
         })
         toast.success('Interview created.')
       }

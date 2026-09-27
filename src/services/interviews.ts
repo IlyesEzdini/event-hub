@@ -28,8 +28,16 @@ export async function listInterviews(): Promise<InterviewWithClub[]> {
   return data as InterviewWithClub[]
 }
 
-export async function createInterview(input:any) {
-  // 1. Create the interview
+export async function createInterview(input: {
+  dean_id: string
+  club_id: string
+  interview_date: string
+  interview_time: string
+  place: string
+  poste: string
+  department: string
+  coordinator_emails: string[]
+}) {
   const { data, error } = await supabase
     .from('interviews')
     .insert({
@@ -47,14 +55,12 @@ export async function createInterview(input:any) {
     .single()
 
   if (error) {
-    console.error('Interview INSERT failed:', error)
+    console.error('Interview INSERT error:', error)
     throw error
   }
 
-  console.log('Interview created:', data)
-
-  // 2. Notify the coordinator
-  const { data: notificationData, error: notificationError } =
+  // Notify coordinator AFTER successful insert
+  const { error: notificationError } =
     await supabase.functions.invoke('notify-interviewer', {
       body: {
         interview_id: data.id,
@@ -63,20 +69,8 @@ export async function createInterview(input:any) {
 
   if (notificationError) {
     console.error(
-      'notify-interviewer failed:',
+      'Coordinator notification failed:',
       notificationError
-    )
-
-    // IMPORTANT:
-    // The interview was already created successfully.
-    // Don't delete it just because email failed.
-    console.warn(
-      'Interview created, but coordinator notification failed.'
-    )
-  } else {
-    console.log(
-      'Coordinator notification sent:',
-      notificationData
     )
   }
 
