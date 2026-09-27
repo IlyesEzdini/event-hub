@@ -81,7 +81,7 @@ export default function InterviewsPage() {
     try {
       if (editing) {
         await updateInterview(editing.id, {
-          ...(isDean ? { dean_profile_id: profile?.id ?? editing.dean_profile_id, club_id: input.club_id } : {}),
+          ...(isDean ? { dean_id: profile?.id ?? editing.dean_profile_id, club_id: input.club_id } : {}),
           interview_date: input.interview_date,
           interview_time: input.interview_time,
           place: input.place,
@@ -93,7 +93,7 @@ export default function InterviewsPage() {
       } else {
         if (!profile?.id) throw new Error('Dean profile not found.')
         await createInterview({
-          dean_profile_id: profile.id,
+          dean_id: profile.id,
           club_id: input.club_id,
           interview_date: input.interview_date,
           interview_time: input.interview_time,

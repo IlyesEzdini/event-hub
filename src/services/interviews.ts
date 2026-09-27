@@ -7,7 +7,7 @@ import type {
 } from '@/types/database'
 
 export interface InterviewInput {
-  dean_profile_id: string
+  dean_id: string
   club_id: string
   interview_date: string
   interview_time: string
