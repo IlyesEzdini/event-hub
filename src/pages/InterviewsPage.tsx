@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import toast from 'react-hot-toast'
 import {
   CalendarCheck2,
@@ -37,6 +37,7 @@ import type {
   InterviewWithClub,
   Profile,
 } from '@/types/database'
+import { supabase } from '@/lib/supabase'
 
 const POSTES: { value: InterviewPoste; label: string }[] = [
   { value: 'manager', label: 'Manager' },
@@ -80,7 +81,7 @@ export default function InterviewsPage() {
   const [editing, setEditing] = useState<InterviewWithClub | null>(null)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-
+  const [deanProfiles, setDeanProfiles] = useState<Profile[]>([])
   const isAdmin = profile?.role === 'admin'
   const isDean = profile?.role === 'dean'
 
@@ -98,6 +99,24 @@ export default function InterviewsPage() {
 
   const upcoming = interviews.filter((item) => item.status === 'pending')
   const done = interviews.filter((item) => item.status === 'done')
+  useEffect(() => {
+  async function loadDeanProfiles() {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'dean')
+      .order('manager_name', { ascending: true })
+
+    if (error) {
+      console.error('Failed to load dean profiles:', error)
+      return
+    }
+
+    setDeanProfiles((data ?? []) as Profile[])
+  }
+
+  loadDeanProfiles()
+}, [])
 
   function openCreate() {
     setEditing(null)
@@ -287,7 +306,7 @@ export default function InterviewsPage() {
           profileId={profile?.id ?? ''}
           responsibleClubs={responsibleClubs}
           allClubs={clubs}
-          deans={deans}
+          deans={deanProfiles}
           coordinators={coordinators}
           interview={editing}
           saving={saving}

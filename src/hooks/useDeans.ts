@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { listDeans } from '@/services/deans'
-import type { Profile } from '@/types/database'
+import type { Dean } from '@/types/database'
 
 export function useDeans() {
-  const [deans, setDeans] = useState<Profile[]>([])
+  const [deans, setDeans] = useState<Dean[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
