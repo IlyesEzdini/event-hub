@@ -57,9 +57,9 @@ export async function createInterview(input: InterviewInput): Promise<InterviewW
     .invoke('notify-interviewer', {
       body: { interview_id: interview.id },
     })
-    .then(({ error: notifyError }) => {
-      if (notifyError) {
-        console.error('notify-interviewer failed:', notifyError)
+    .then((result) => {
+      if (result.error) {
+        console.error('notify-interviewer failed:', result.error)
       }
     })
 

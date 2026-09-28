@@ -3,19 +3,22 @@ import toast from 'react-hot-toast'
 import {
   CalendarCheck2,
   CheckCircle2,
+  ChevronDown,
   Clock3,
+  Filter,
   MapPin,
   Pencil,
   Plus,
-  ShieldCheck,
+  RotateCcw,
+  Search,
   Trash2,
   UserRound,
   UsersRound,
+  X,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useClubs } from '@/hooks/useClubs'
 import { useCoordinators } from '@/hooks/useCoordinators'
-import { useDeans } from '@/hooks/useDeans'
 import { useInterviews } from '@/hooks/useInterviews'
 import {
   createInterview,
@@ -26,18 +29,16 @@ import {
 import { Modal } from '@/components/ui/Modal'
 import { CardSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
-import {
-  getInitials,
-  getInterviewDeanColor,
-} from '@/utils/interviewColors'
+import { supabase } from '@/lib/supabase'
+import { getInitials, getInterviewDeanColor } from '@/utils/interviewColors'
 import type {
   CoordinatorField,
   InterviewDepartment,
   InterviewPoste,
+  InterviewStatus,
   InterviewWithClub,
   Profile,
 } from '@/types/database'
-import { supabase } from '@/lib/supabase'
 
 const POSTES: { value: InterviewPoste; label: string }[] = [
   { value: 'manager', label: 'Manager' },
@@ -53,6 +54,20 @@ const DEPARTMENTS: { value: InterviewDepartment; label: string }[] = [
   { value: 'partenariat', label: 'Partenariat' },
   { value: 'PAP', label: 'PAP' },
 ]
+
+const DATE_PRESETS = [
+  { value: 'all', label: 'All dates' },
+  { value: 'today', label: 'Today' },
+  { value: 'tomorrow', label: 'Tomorrow' },
+  { value: 'this_week', label: 'This week' },
+  { value: 'next_week', label: 'Next week' },
+  { value: 'this_month', label: 'This month' },
+  { value: 'custom', label: 'Custom range' },
+] as const
+
+type DatePreset = (typeof DATE_PRESETS)[number]['value']
+type ViewMode = 'all' | 'mine'
+type StatusFilter = 'all' | InterviewStatus
 
 function requiredCoordinatorField(
   poste: InterviewPoste,
@@ -71,25 +86,128 @@ function canManageInterview(
   return profile.role === 'dean' && profile.id === interview.dean_id
 }
 
+function toDateKey(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function startOfLocalWeek(date: Date) {
+  const result = new Date(date)
+  const day = result.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+  result.setDate(result.getDate() + diff)
+  result.setHours(0, 0, 0, 0)
+  return result
+}
+
+function endOfLocalWeek(date: Date) {
+  const result = startOfLocalWeek(date)
+  result.setDate(result.getDate() + 6)
+  return result
+}
+
+function getDateRange(preset: DatePreset): { from?: string; to?: string } {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  if (preset === 'all' || preset === 'custom') return {}
+
+  if (preset === 'today') {
+    const key = toDateKey(today)
+    return { from: key, to: key }
+  }
+
+  if (preset === 'tomorrow') {
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const key = toDateKey(tomorrow)
+    return { from: key, to: key }
+  }
+
+  if (preset === 'this_week') {
+    return {
+      from: toDateKey(startOfLocalWeek(today)),
+      to: toDateKey(endOfLocalWeek(today)),
+    }
+  }
+
+  if (preset === 'next_week') {
+    const nextWeekStart = startOfLocalWeek(today)
+    nextWeekStart.setDate(nextWeekStart.getDate() + 7)
+    const nextWeekEnd = new Date(nextWeekStart)
+    nextWeekEnd.setDate(nextWeekEnd.getDate() + 6)
+    return {
+      from: toDateKey(nextWeekStart),
+      to: toDateKey(nextWeekEnd),
+    }
+  }
+
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+  return {
+    from: toDateKey(monthStart),
+    to: toDateKey(monthEnd),
+  }
+}
+
+function formatInterviewDate(value: string) {
+  return new Date(`${value}T00:00:00`).toLocaleDateString('fr-FR')
+}
+
 export default function InterviewsPage() {
   const { profile } = useAuth()
   const { clubs } = useClubs()
   const { coordinators } = useCoordinators()
-  const { deans } = useDeans()
   const { interviews, loading, reload } = useInterviews()
+
+  const [deanProfiles, setDeanProfiles] = useState<Profile[]>([])
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<InterviewWithClub | null>(null)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [deanProfiles, setDeanProfiles] = useState<Profile[]>([])
+
+  const [viewMode, setViewMode] = useState<ViewMode>('all')
+  const [search, setSearch] = useState('')
+  const [datePreset, setDatePreset] = useState<DatePreset>('all')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
+  const [department, setDepartment] = useState<InterviewDepartment | 'all'>('all')
+  const [poste, setPoste] = useState<InterviewPoste | 'all'>('all')
+  const [status, setStatus] = useState<StatusFilter>('all')
+  const [deanId, setDeanId] = useState('all')
+  const [coordinatorEmail, setCoordinatorEmail] = useState('all')
+  const [showFilters, setShowFilters] = useState(false)
+  const [availabilityOpen, setAvailabilityOpen] = useState(false)
+  const [availabilityCoordinator, setAvailabilityCoordinator] = useState('')
+  const [availabilityDate, setAvailabilityDate] = useState(toDateKey(new Date()))
+
   const isAdmin = profile?.role === 'admin'
   const isDean = profile?.role === 'dean'
 
+  useEffect(() => {
+    async function loadDeanProfiles() {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'dean')
+        .order('manager_name', { ascending: true })
+
+      if (error) {
+        console.error('Failed to load dean profiles:', error)
+        return
+      }
+
+      setDeanProfiles((data ?? []) as Profile[])
+    }
+
+    loadDeanProfiles()
+  }, [])
+
   const responsibleNames = useMemo(() => {
     if (!profile) return []
-    return profile.responsible_clubs?.length
-      ? profile.responsible_clubs
-      : profile.clubs ?? []
+    return profile.responsible_clubs?.length ? profile.responsible_clubs : profile.clubs ?? []
   }, [profile])
 
   const responsibleClubs = useMemo(
@@ -97,26 +215,120 @@ export default function InterviewsPage() {
     [clubs, responsibleNames],
   )
 
-  const upcoming = interviews.filter((item) => item.status === 'pending')
-  const done = interviews.filter((item) => item.status === 'done')
-  useEffect(() => {
-  async function loadDeanProfiles() {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('role', 'dean')
-      .order('manager_name', { ascending: true })
-
-    if (error) {
-      console.error('Failed to load dean profiles:', error)
-      return
+  const dateRange = useMemo(() => {
+    if (datePreset === 'custom') {
+      return { from: customFrom || undefined, to: customTo || undefined }
     }
+    return getDateRange(datePreset)
+  }, [datePreset, customFrom, customTo])
 
-    setDeanProfiles((data ?? []) as Profile[])
+  const filteredInterviews = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase()
+
+    return interviews.filter((interview) => {
+      if (viewMode === 'mine' && interview.dean_id !== profile?.id) return false
+      if (status !== 'all' && interview.status !== status) return false
+      if (department !== 'all' && interview.department !== department) return false
+      if (poste !== 'all' && interview.poste !== poste) return false
+      if (deanId !== 'all' && interview.dean_id !== deanId) return false
+      if (
+        coordinatorEmail !== 'all' &&
+        !interview.coordinator_emails?.some(
+          (email) => email.toLowerCase() === coordinatorEmail.toLowerCase(),
+        )
+      ) {
+        return false
+      }
+
+      if (dateRange.from && interview.interview_date < dateRange.from) return false
+      if (dateRange.to && interview.interview_date > dateRange.to) return false
+
+      if (normalizedSearch) {
+        const haystack = [
+          interview.club?.name,
+          interview.dean_name,
+          interview.coordinator_name,
+          ...(interview.coordinator_emails ?? []),
+          interview.place,
+          interview.department,
+          interview.poste,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+
+        if (!haystack.includes(normalizedSearch)) return false
+      }
+
+      return true
+    })
+  }, [
+    interviews,
+    viewMode,
+    profile?.id,
+    status,
+    department,
+    poste,
+    deanId,
+    coordinatorEmail,
+    dateRange.from,
+    dateRange.to,
+    search,
+  ])
+
+  const pending = filteredInterviews.filter((item) => item.status === 'pending')
+  const done = filteredInterviews.filter((item) => item.status === 'done')
+
+  const activeFilterCount = [
+    search.trim(),
+    datePreset !== 'all',
+    department !== 'all',
+    poste !== 'all',
+    status !== 'all',
+    deanId !== 'all',
+    coordinatorEmail !== 'all',
+    viewMode === 'mine',
+  ].filter(Boolean).length
+
+  const availabilityInterviews = useMemo(() => {
+    if (!availabilityCoordinator || !availabilityDate) return []
+
+    return interviews
+      .filter(
+        (interview) =>
+          interview.interview_date === availabilityDate &&
+          interview.status === 'pending' &&
+          interview.coordinator_emails?.some(
+            (email) => email.toLowerCase() === availabilityCoordinator.toLowerCase(),
+          ),
+      )
+      .sort((a, b) => a.interview_time.localeCompare(b.interview_time))
+  }, [interviews, availabilityCoordinator, availabilityDate])
+
+  const availabilitySlots = useMemo(() => {
+    const slots: { time: string; interview: InterviewWithClub | null }[] = []
+    for (let hour = 8; hour <= 20; hour += 1) {
+      const time = `${String(hour).padStart(2, '0')}:00`
+      const interview = availabilityInterviews.find(
+        (item) => item.interview_time.slice(0, 5) === time,
+      ) ?? null
+      slots.push({ time, interview })
+    }
+    return slots
+  }, [availabilityInterviews])
+
+  function resetFilters() {
+    setSearch('')
+    setDatePreset('all')
+    setCustomFrom('')
+    setCustomTo('')
+    setDepartment('all')
+    setPoste('all')
+    setStatus('all')
+    setDeanId('all')
+    setCoordinatorEmail('all')
+    setViewMode('all')
   }
-
-  loadDeanProfiles()
-}, [])
 
   function openCreate() {
     setEditing(null)
@@ -128,17 +340,15 @@ export default function InterviewsPage() {
       toast.error('You can only edit your own interviews.')
       return
     }
-
     setEditing(interview)
     setFormOpen(true)
   }
 
   async function handleSave(input: InterviewFormState) {
     setSaving(true)
-
     try {
       if (editing) {
-        const payload = {
+        await updateInterview(editing.id, {
           dean_id: input.dean_id,
           club_id: input.club_id,
           interview_date: input.interview_date,
@@ -147,14 +357,10 @@ export default function InterviewsPage() {
           poste: input.poste,
           department: input.department,
           coordinator_emails: [input.coordinator_email],
-        }
-
-        await updateInterview(editing.id, payload)
+        })
         toast.success('Interview updated.')
       } else {
-        if (!input.dean_id) {
-          throw new Error('Please select a dean.')
-        }
+        if (!input.dean_id) throw new Error('Please select a dean.')
 
         await createInterview({
           dean_id: input.dean_id,
@@ -166,7 +372,6 @@ export default function InterviewsPage() {
           department: input.department,
           coordinator_emails: [input.coordinator_email],
         })
-
         toast.success('Interview created.')
       }
 
@@ -174,11 +379,7 @@ export default function InterviewsPage() {
       setEditing(null)
       await reload()
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : 'Unable to save the interview.',
-      )
+      toast.error(error instanceof Error ? error.message : 'Unable to save the interview.')
     } finally {
       setSaving(false)
     }
@@ -195,11 +396,7 @@ export default function InterviewsPage() {
       toast.success('Interview marked as done.')
       await reload()
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : 'Unable to update the interview.',
-      )
+      toast.error(error instanceof Error ? error.message : 'Unable to update the interview.')
     }
   }
 
@@ -209,21 +406,15 @@ export default function InterviewsPage() {
     const confirmed = window.confirm(
       `Delete the interview for ${interview.club?.name ?? 'this club'}? This action cannot be undone.`,
     )
-
     if (!confirmed) return
 
     setDeletingId(interview.id)
-
     try {
       await deleteInterview(interview.id)
       toast.success('Interview deleted.')
       await reload()
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : 'Unable to delete the interview.',
-      )
+      toast.error(error instanceof Error ? error.message : 'Unable to delete the interview.')
     } finally {
       setDeletingId(null)
     }
@@ -231,7 +422,7 @@ export default function InterviewsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
             <CalendarCheck2 size={21} />
@@ -239,46 +430,280 @@ export default function InterviewsPage() {
           <div>
             <h1 className="text-xl font-bold text-slate-900">Interviews</h1>
             <p className="text-sm text-slate-500">
-              All interviews are visible. Editing is limited to admins and the dean concerned.
+              Search, filter and manage interviews from one place.
             </p>
           </div>
         </div>
 
-        {(isAdmin || isDean) && (
-          <button className="btn-primary shrink-0" onClick={openCreate}>
-            <Plus size={16} /> Create interview
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {isDean && (
+            <div className="flex rounded-xl border border-slate-200 bg-white p-1 shadow-soft">
+              <button
+                type="button"
+                onClick={() => setViewMode('all')}
+                className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                  viewMode === 'all'
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-500 hover:bg-slate-50'
+                }`}
+              >
+                All interviews
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('mine')}
+                className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                  viewMode === 'mine'
+                    ? 'bg-brand-600 text-white'
+                    : 'text-slate-500 hover:bg-slate-50'
+                }`}
+              >
+                My interviews
+              </button>
+            </div>
+          )}
+
+          {(isAdmin || isDean) && (
+            <button className="btn-primary" onClick={openCreate}>
+              <Plus size={16} /> Create interview
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <InterviewStat label="Total" value={interviews.length} />
-        <InterviewStat label="Pending" value={upcoming.length} tone="amber" />
+        <InterviewStat label="Showing" value={filteredInterviews.length} />
+        <InterviewStat label="Pending" value={pending.length} tone="amber" />
         <InterviewStat label="Done" value={done.length} tone="emerald" />
-        <InterviewStat label="Deans" value={new Set(interviews.map((item) => item.dean_id).filter(Boolean)).size} tone="brand" />
+        <InterviewStat
+          label={viewMode === 'mine' ? 'My interviews' : 'Total'}
+          value={viewMode === 'mine' ? filteredInterviews.length : interviews.length}
+          tone="brand"
+        />
       </div>
+
+      <section className="card overflow-visible p-4 sm:p-5">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+          <div className="relative min-w-0 flex-1">
+            <Search
+              size={17}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            />
+            <input
+              className="input pl-10 pr-10"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by dean, coordinator, club, place, department..."
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowFilters((value) => !value)}
+            className="btn-secondary shrink-0"
+          >
+            <Filter size={16} />
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="rounded-full bg-brand-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                {activeFilterCount}
+              </span>
+            )}
+            <ChevronDown
+              size={15}
+              className={`transition ${showFilters ? 'rotate-180' : ''}`}
+            />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setAvailabilityCoordinator(
+                coordinatorEmail !== 'all' ? coordinatorEmail : coordinators[0]?.email ?? '',
+              )
+              setAvailabilityDate(dateRange.from ?? toDateKey(new Date()))
+              setAvailabilityOpen(true)
+            }}
+            className="btn-secondary shrink-0"
+          >
+            <Clock3 size={16} /> Availability
+          </button>
+        </div>
+
+        {showFilters && (
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <FilterField label="Date">
+                <select
+                  className="input"
+                  value={datePreset}
+                  onChange={(e) => setDatePreset(e.target.value as DatePreset)}
+                >
+                  {DATE_PRESETS.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </FilterField>
+
+              <FilterField label="Department">
+                <select
+                  className="input"
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value as InterviewDepartment | 'all')}
+                >
+                  <option value="all">All departments</option>
+                  {DEPARTMENTS.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </FilterField>
+
+              <FilterField label="Poste">
+                <select
+                  className="input"
+                  value={poste}
+                  onChange={(e) => setPoste(e.target.value as InterviewPoste | 'all')}
+                >
+                  <option value="all">All postes</option>
+                  {POSTES.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </FilterField>
+
+              <FilterField label="Status">
+                <select
+                  className="input"
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as StatusFilter)}
+                >
+                  <option value="all">All statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="done">Done</option>
+                </select>
+              </FilterField>
+
+              <FilterField label="Dean">
+                <select
+                  className="input"
+                  value={deanId}
+                  onChange={(e) => setDeanId(e.target.value)}
+                >
+                  <option value="all">All deans</option>
+                  {deanProfiles.map((dean) => (
+                    <option key={dean.id} value={dean.id}>
+                      {dean.manager_name}
+                    </option>
+                  ))}
+                </select>
+              </FilterField>
+
+              <FilterField label="Coordinator">
+                <select
+                  className="input"
+                  value={coordinatorEmail}
+                  onChange={(e) => setCoordinatorEmail(e.target.value)}
+                >
+                  <option value="all">All coordinators</option>
+                  {coordinators.map((coordinator) => (
+                    <option key={coordinator.email} value={coordinator.email}>
+                      {coordinator.username}
+                    </option>
+                  ))}
+                </select>
+              </FilterField>
+
+              {datePreset === 'custom' && (
+                <FilterField label="From">
+                  <input
+                    className="input"
+                    type="date"
+                    value={customFrom}
+                    onChange={(e) => setCustomFrom(e.target.value)}
+                  />
+                </FilterField>
+              )}
+
+              {datePreset === 'custom' && (
+                <FilterField label="To">
+                  <input
+                    className="input"
+                    type="date"
+                    value={customTo}
+                    onChange={(e) => setCustomTo(e.target.value)}
+                  />
+                </FilterField>
+              )}
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs text-slate-400">
+                Showing <strong className="text-slate-600">{filteredInterviews.length}</strong> of{' '}
+                <strong className="text-slate-600">{interviews.length}</strong> interviews.
+              </p>
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-brand-600"
+              >
+                <RotateCcw size={13} /> Clear filters
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeFilterCount > 0 && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {viewMode === 'mine' && <FilterChip label="My interviews" onRemove={() => setViewMode('all')} />}
+            {search && <FilterChip label={`Search: ${search}`} onRemove={() => setSearch('')} />}
+            {datePreset !== 'all' && (
+              <FilterChip label={`Date: ${DATE_PRESETS.find((item) => item.value === datePreset)?.label ?? datePreset}`} onRemove={() => setDatePreset('all')} />
+            )}
+            {department !== 'all' && <FilterChip label={`Department: ${department}`} onRemove={() => setDepartment('all')} />}
+            {poste !== 'all' && <FilterChip label={`Poste: ${POSTES.find((item) => item.value === poste)?.label ?? poste}`} onRemove={() => setPoste('all')} />}
+            {status !== 'all' && <FilterChip label={`Status: ${status}`} onRemove={() => setStatus('all')} />}
+            {deanId !== 'all' && <FilterChip label={`Dean: ${deanProfiles.find((item) => item.id === deanId)?.manager_name ?? deanId}`} onRemove={() => setDeanId('all')} />}
+            {coordinatorEmail !== 'all' && <FilterChip label={`Coordinator: ${coordinators.find((item) => item.email === coordinatorEmail)?.username ?? coordinatorEmail}`} onRemove={() => setCoordinatorEmail('all')} />}
+          </div>
+        )}
+      </section>
 
       {loading ? (
         <CardSkeleton />
-      ) : interviews.length === 0 ? (
+      ) : filteredInterviews.length === 0 ? (
         <div className="card p-8">
           <EmptyState
             icon={CalendarCheck2}
-            title="No interviews yet"
-            description={isAdmin || isDean ? 'Create your first interview.' : 'No interviews have been created yet.'}
+            title="No matching interviews"
+            description="Try changing your filters or clear them to see all interviews."
           />
         </div>
       ) : (
         <div className="space-y-7">
           <InterviewSection
             title="Pending"
-            items={upcoming}
+            items={pending}
             profile={profile}
             onEdit={openEdit}
             onDone={handleDone}
             onDelete={handleDelete}
             deletingId={deletingId}
-            emptyText="No pending interviews."
+            emptyText="No pending interviews match your filters."
           />
 
           <InterviewSection
@@ -289,10 +714,104 @@ export default function InterviewsPage() {
             onDone={handleDone}
             onDelete={handleDelete}
             deletingId={deletingId}
-            emptyText="No completed interviews."
+            emptyText="No completed interviews match your filters."
           />
         </div>
       )}
+
+      <Modal
+        open={availabilityOpen}
+        onClose={() => setAvailabilityOpen(false)}
+        title="Coordinator availability"
+        maxWidth="max-w-3xl"
+      >
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FilterField label="Coordinator">
+              <select
+                className="input"
+                value={availabilityCoordinator}
+                onChange={(e) => setAvailabilityCoordinator(e.target.value)}
+              >
+                <option value="">Select a coordinator</option>
+                {coordinators.map((coordinator) => (
+                  <option key={coordinator.email} value={coordinator.email}>
+                    {coordinator.username} · {coordinator.field}
+                  </option>
+                ))}
+              </select>
+            </FilterField>
+
+            <FilterField label="Date">
+              <input
+                className="input"
+                type="date"
+                value={availabilityDate}
+                onChange={(e) => setAvailabilityDate(e.target.value)}
+              />
+            </FilterField>
+          </div>
+
+          {!availabilityCoordinator ? (
+            <div className="rounded-2xl bg-slate-50 p-6 text-center text-sm text-slate-500">
+              Select a coordinator to see their schedule.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-4 py-3">
+                <div>
+                  <p className="text-sm font-bold text-slate-900">
+                    {coordinators.find((item) => item.email === availabilityCoordinator)?.username ?? availabilityCoordinator}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {formatInterviewDate(availabilityDate)} · {availabilityInterviews.length} scheduled interview(s)
+                  </p>
+                </div>
+                <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+                  {availabilitySlots.filter((slot) => !slot.interview).length} free slots
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {availabilitySlots.map((slot) => (
+                  <div
+                    key={slot.time}
+                    className={`rounded-xl border px-4 py-3 ${
+                      slot.interview
+                        ? 'border-amber-200 bg-amber-50'
+                        : 'border-emerald-200 bg-emerald-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-bold text-slate-800">
+                        {slot.time}
+                      </span>
+                      {slot.interview ? (
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                          Busy
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+                          Available
+                        </span>
+                      )}
+                    </div>
+                    {slot.interview && (
+                      <p className="mt-1 truncate text-xs text-slate-600">
+                        {slot.interview.club?.name ?? 'Interview'} · {slot.interview.dean_name ?? 'Dean'}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <p className="text-[11px] text-slate-400">
+                Availability is shown in one-hour slots from 08:00 to 20:00. A slot is busy when an interview starts at that time.
+              </p>
+            </div>
+          )}
+        </div>
+      </Modal>
 
       <Modal
         open={formOpen}
@@ -342,6 +861,40 @@ function InterviewStat({
   )
 }
 
+function FilterField({
+  label,
+  children,
+}: {
+  label: string
+  children: ReactNode
+}) {
+  return (
+    <div>
+      <label className="label">{label}</label>
+      {children}
+    </div>
+  )
+}
+
+function FilterChip({
+  label,
+  onRemove,
+}: {
+  label: string
+  onRemove: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onRemove}
+      className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 text-[11px] font-semibold text-brand-700 ring-1 ring-inset ring-brand-100"
+    >
+      {label}
+      <X size={12} />
+    </button>
+  )
+}
+
 interface InterviewFormState {
   dean_id: string
   club_id: string
@@ -381,7 +934,6 @@ function InterviewForm({
   onCancel: () => void
 }) {
   const availableClubs = isAdmin ? allClubs : responsibleClubs
-
   const initialDeanId = interview?.dean_id ?? (isDean ? profileId : '')
   const initialCoordinatorEmail = interview?.coordinator_emails?.[0] ?? ''
 
@@ -396,48 +948,27 @@ function InterviewForm({
     coordinator_email: initialCoordinatorEmail,
   }))
 
-  const requiredField = requiredCoordinatorField(
-    form.poste,
-    form.department,
-  )
-
+  const requiredField = requiredCoordinatorField(form.poste, form.department)
   const availableCoordinators = coordinators.filter(
     (coordinator) => coordinator.field === requiredField,
   )
 
-  function set<K extends keyof InterviewFormState>(
-    key: K,
-    value: InterviewFormState[K],
-  ) {
-    setForm((current) => ({
-      ...current,
-      [key]: value,
-    }))
+  function set<K extends keyof InterviewFormState>(key: K, value: InterviewFormState[K]) {
+    setForm((current) => ({ ...current, [key]: value }))
   }
 
   function handleDean(value: string) {
-    setForm((current) => ({
-      ...current,
-      dean_id: value,
-    }))
+    setForm((current) => ({ ...current, dean_id: value }))
   }
 
   function handlePoste(value: InterviewPoste) {
-    const field = requiredCoordinatorField(
-      value,
-      form.department,
-    )
-
-    const available = coordinators.filter(
-      (coordinator) => coordinator.field === field,
-    )
-
+    const field = requiredCoordinatorField(value, form.department)
+    const available = coordinators.filter((coordinator) => coordinator.field === field)
     setForm((current) => ({
       ...current,
       poste: value,
       coordinator_email: available.some(
-        (coordinator) =>
-          coordinator.email === current.coordinator_email,
+        (coordinator) => coordinator.email === current.coordinator_email,
       )
         ? current.coordinator_email
         : '',
@@ -445,21 +976,13 @@ function InterviewForm({
   }
 
   function handleDepartment(value: InterviewDepartment) {
-    const field = requiredCoordinatorField(
-      form.poste,
-      value,
-    )
-
-    const available = coordinators.filter(
-      (coordinator) => coordinator.field === field,
-    )
-
+    const field = requiredCoordinatorField(form.poste, value)
+    const available = coordinators.filter((coordinator) => coordinator.field === field)
     setForm((current) => ({
       ...current,
       department: value,
       coordinator_email: available.some(
-        (coordinator) =>
-          coordinator.email === current.coordinator_email,
+        (coordinator) => coordinator.email === current.coordinator_email,
       )
         ? current.coordinator_email
         : '',
@@ -468,7 +991,6 @@ function InterviewForm({
 
   async function submit(e: FormEvent) {
     e.preventDefault()
-
     if (
       !form.dean_id ||
       !form.club_id ||
@@ -480,7 +1002,6 @@ function InterviewForm({
       toast.error('Please complete all interview fields.')
       return
     }
-
     await onSubmit(form)
   }
 
@@ -488,13 +1009,8 @@ function InterviewForm({
     <form onSubmit={submit} className="space-y-4">
       <div>
         <label className="label">Dean</label>
-
         {isAdmin ? (
-          <select
-            className="input"
-            value={form.dean_id}
-            onChange={(e) => handleDean(e.target.value)}
-          >
+          <select className="input" value={form.dean_id} onChange={(e) => handleDean(e.target.value)}>
             <option value="">Select a dean</option>
             {deans.map((dean) => (
               <option key={dean.id} value={dean.id}>
@@ -503,22 +1019,13 @@ function InterviewForm({
             ))}
           </select>
         ) : (
-          <input
-            className="input bg-slate-50"
-            value={profileName}
-            readOnly
-          />
+          <input className="input bg-slate-50" value={profileName} readOnly />
         )}
       </div>
 
       <div>
         <label className="label">Club</label>
-
-        <select
-          className="input"
-          value={form.club_id}
-          onChange={(e) => set('club_id', e.target.value)}
-        >
+        <select className="input" value={form.club_id} onChange={(e) => set('club_id', e.target.value)}>
           <option value="">Select a club</option>
           {availableClubs.map((club) => (
             <option key={club.id} value={club.id}>
@@ -535,21 +1042,16 @@ function InterviewForm({
             className="input"
             type="date"
             value={form.interview_date}
-            onChange={(e) =>
-              set('interview_date', e.target.value)
-            }
+            onChange={(e) => set('interview_date', e.target.value)}
           />
         </div>
-
         <div>
           <label className="label">Time</label>
           <input
             className="input"
             type="time"
             value={form.interview_time}
-            onChange={(e) =>
-              set('interview_time', e.target.value)
-            }
+            onChange={(e) => set('interview_time', e.target.value)}
           />
         </div>
       </div>
@@ -567,13 +1069,7 @@ function InterviewForm({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label className="label">Poste</label>
-          <select
-            className="input"
-            value={form.poste}
-            onChange={(e) =>
-              handlePoste(e.target.value as InterviewPoste)
-            }
-          >
+          <select className="input" value={form.poste} onChange={(e) => handlePoste(e.target.value as InterviewPoste)}>
             {POSTES.map((item) => (
               <option key={item.value} value={item.value}>
                 {item.label}
@@ -581,17 +1077,12 @@ function InterviewForm({
             ))}
           </select>
         </div>
-
         <div>
           <label className="label">Department</label>
           <select
             className="input"
             value={form.department}
-            onChange={(e) =>
-              handleDepartment(
-                e.target.value as InterviewDepartment,
-              )
-            }
+            onChange={(e) => handleDepartment(e.target.value as InterviewDepartment)}
           >
             {DEPARTMENTS.map((item) => (
               <option key={item.value} value={item.value}>
@@ -607,26 +1098,18 @@ function InterviewForm({
         <select
           className="input"
           value={form.coordinator_email}
-          onChange={(e) =>
-            set('coordinator_email', e.target.value)
-          }
+          onChange={(e) => set('coordinator_email', e.target.value)}
         >
           <option value="">Select a coordinator</option>
           {availableCoordinators.map((coordinator) => (
-            <option
-              key={coordinator.email}
-              value={coordinator.email}
-            >
+            <option key={coordinator.email} value={coordinator.email}>
               {coordinator.username} · {coordinator.field}
             </option>
           ))}
         </select>
-
         <p className="mt-1 text-xs text-slate-400">
-          Required field:{' '}
-          <strong>{requiredField}</strong>
+          Required field: <strong>{requiredField}</strong>
         </p>
-
         {availableCoordinators.length === 0 && (
           <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
             No coordinator is configured for this field yet.
@@ -635,29 +1118,15 @@ function InterviewForm({
       </div>
 
       <div className="flex justify-end gap-2 pt-2">
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={onCancel}
-          disabled={saving}
-        >
+        <button type="button" className="btn-secondary" onClick={onCancel} disabled={saving}>
           Cancel
         </button>
-
         <button
           type="submit"
           className="btn-primary"
-          disabled={
-            saving ||
-            availableCoordinators.length === 0 ||
-            (isAdmin && deans.length === 0)
-          }
+          disabled={saving || availableCoordinators.length === 0 || (isAdmin && deans.length === 0)}
         >
-          {saving
-            ? 'Saving…'
-            : interview
-              ? 'Save changes'
-              : 'Create interview'}
+          {saving ? 'Saving…' : interview ? 'Save changes' : 'Create interview'}
         </button>
       </div>
     </form>
@@ -689,50 +1158,27 @@ function InterviewSection({
     <section>
       <div className="mb-3 flex items-center gap-2">
         {title === 'Done' ? (
-          <CheckCircle2
-            size={17}
-            className="text-emerald-500"
-          />
+          <CheckCircle2 size={17} className="text-emerald-500" />
         ) : (
-          <Clock3
-            size={17}
-            className="text-amber-500"
-          />
+          <Clock3 size={17} className="text-amber-500" />
         )}
-        <h2 className="text-sm font-bold text-slate-900">
-          {title}
-        </h2>
+        <h2 className="text-sm font-bold text-slate-900">{title}</h2>
         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">
           {items.length}
         </span>
       </div>
 
       {items.length === 0 ? (
-        <div className="card p-5 text-sm text-slate-400">
-          {emptyText}
-        </div>
+        <div className="card p-5 text-sm text-slate-400">{emptyText}</div>
       ) : (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {items.map((interview) => {
-            const color = getInterviewDeanColor(
-              interview.dean_id,
-            )
-
-            const canManage = canManageInterview(
-              profile,
-              interview,
-            )
-
-            const deanName =
-              interview.dean_name ?? 'Unknown dean'
-
+            const color = getInterviewDeanColor(interview.dean_id)
+            const canManage = canManageInterview(profile, interview)
+            const deanName = interview.dean_name ?? 'Unknown dean'
             const coordinatorName =
-              interview.coordinator_name ??
-              interview.coordinator_emails?.[0] ??
-              'Unknown coordinator'
-
-            const isDeleting =
-              deletingId === interview.id
+              interview.coordinator_name ?? interview.coordinator_emails?.[0] ?? 'Unknown coordinator'
+            const isDeleting = deletingId === interview.id
 
             return (
               <article
@@ -741,26 +1187,24 @@ function InterviewSection({
               >
                 <div className={`border-b border-slate-100 ${color.softBackground} px-5 py-4`}>
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-3">
-                        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-bold ring-4 ${color.avatar} ${color.ring}`}>
-                          {getInitials(deanName)}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-bold text-slate-900">
-                              {interview.club?.name ?? 'Unknown club'}
-                            </p>
-                            {interview.dean_id === profile?.id && (
-                              <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-700 ring-1 ring-inset ring-brand-200">
-                                Your interview
-                              </span>
-                            )}
-                          </div>
-                          <p className={`mt-1 text-xs font-semibold ${color.text}`}>
-                            {deanName}
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-bold ring-4 ${color.avatar} ${color.ring}`}>
+                        {getInitials(deanName)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-bold text-slate-900">
+                            {interview.club?.name ?? 'Unknown club'}
                           </p>
+                          {interview.dean_id === profile?.id && (
+                            <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-700 ring-1 ring-inset ring-brand-200">
+                              Your interview
+                            </span>
+                          )}
                         </div>
+                        <p className={`mt-1 flex items-center gap-1.5 text-xs font-semibold ${color.text}`}>
+                          <UserRound size={13} /> {deanName}
+                        </p>
                       </div>
                     </div>
 
@@ -772,71 +1216,35 @@ function InterviewSection({
 
                 <div className="space-y-4 p-5">
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <InfoRow
-                      icon={<CalendarCheck2 size={15} />}
-                      label="Date"
-                      value={new Date(
-                        `${interview.interview_date}T00:00:00`,
-                      ).toLocaleDateString('fr-FR')}
-                    />
-                    <InfoRow
-                      icon={<Clock3 size={15} />}
-                      label="Time"
-                      value={interview.interview_time.slice(0, 5)}
-                    />
-                    <InfoRow
-                      icon={<MapPin size={15} />}
-                      label="Place"
-                      value={interview.place}
-                    />
-                    <InfoRow
-                      icon={<UsersRound size={15} />}
-                      label="Coordinator"
-                      value={coordinatorName}
-                    />
+                    <InfoRow icon={<CalendarCheck2 size={15} />} label="Date" value={formatInterviewDate(interview.interview_date)} />
+                    <InfoRow icon={<Clock3 size={15} />} label="Time" value={interview.interview_time.slice(0, 5)} />
+                    <InfoRow icon={<MapPin size={15} />} label="Place" value={interview.place} />
+                    <InfoRow icon={<UsersRound size={15} />} label="Coordinator" value={coordinatorName} />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-4">
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                        Poste
-                      </p>
-                      <p className="mt-1 text-sm font-semibold capitalize text-slate-700">
-                        {interview.poste.replace('_', ' ')}
-                      </p>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Poste</p>
+                      <p className="mt-1 text-sm font-semibold capitalize text-slate-700">{interview.poste.replace('_', ' ')}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                        Department
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-slate-700">
-                        {interview.department}
-                      </p>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Department</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-700">{interview.department}</p>
                     </div>
                   </div>
 
                   {(canManage || isAdmin) && (
                     <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
                       {canManage && (
-                        <button
-                          className="btn-secondary text-xs"
-                          onClick={() => onEdit(interview)}
-                          disabled={isDeleting}
-                        >
+                        <button className="btn-secondary text-xs" onClick={() => onEdit(interview)} disabled={isDeleting}>
                           <Pencil size={14} /> Edit
                         </button>
                       )}
-
                       {canManage && interview.status !== 'done' && (
-                        <button
-                          className="btn-primary text-xs"
-                          onClick={() => onDone(interview)}
-                          disabled={isDeleting}
-                        >
+                        <button className="btn-primary text-xs" onClick={() => onDone(interview)} disabled={isDeleting}>
                           <CheckCircle2 size={14} /> Mark done
                         </button>
                       )}
-
                       {isAdmin && (
                         <button
                           className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
@@ -870,16 +1278,10 @@ function InfoRow({
 }) {
   return (
     <div className="flex min-w-0 items-center gap-2.5 rounded-xl bg-slate-50 px-3 py-2.5">
-      <span className="shrink-0 text-slate-400">
-        {icon}
-      </span>
+      <span className="shrink-0 text-slate-400">{icon}</span>
       <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-          {label}
-        </p>
-        <p className="truncate text-sm font-medium text-slate-700">
-          {value}
-        </p>
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</p>
+        <p className="truncate text-sm font-medium text-slate-700">{value}</p>
       </div>
     </div>
   )
