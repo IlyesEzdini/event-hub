@@ -1,19 +1,26 @@
 import { useCallback, useEffect, useState } from 'react'
 import { listDeans } from '@/services/deans'
-import type { Dean } from '@/types/database'
+import type { Profile } from '@/types/database'
 
 export function useDeans() {
-  const [deans, setDeans] = useState<Dean[]>([])
+  const [deans, setDeans] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
     setLoading(true)
     setError(null)
+
     try {
-      setDeans(await listDeans())
+      const data = await listDeans()
+
+      setDeans(data)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load deans')
+      setError(
+        e instanceof Error
+          ? e.message
+          : 'Failed to load deans',
+      )
     } finally {
       setLoading(false)
     }
@@ -23,5 +30,10 @@ export function useDeans() {
     reload()
   }, [reload])
 
-  return { deans, loading, error, reload }
+  return {
+    deans,
+    loading,
+    error,
+    reload,
+  }
 }

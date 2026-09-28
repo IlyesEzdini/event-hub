@@ -1,7 +1,7 @@
 
 export type Role = 'admin' | 'manager' | 'assistant' | 'dean' | 'coordinator'
 
-export type CoordinatorField = 'COM' | 'RH' | 'partenariat' | 'PAP' | 'regional'
+export type CoordinatorField = 'event' | 'COM' | 'RH' | 'partenariat' | 'PAP' | 'regional'
 
 export interface Club {
   id: string
@@ -109,14 +109,17 @@ export interface Coordinator {
 
 export interface Interview {
   id: string
-  dean_profile_id: string
-  club_id: string
+  dean_id: string | null
+  dean_name: string | null
+  club_id: string | null
   interview_date: string
   interview_time: string
   place: string
   poste: InterviewPoste
   department: InterviewDepartment
-  coordinator_email: string
+  coordinator_ids: string[]
+  coordinator_emails: string[]
+  coordinator_name: string | null
   status: InterviewStatus
   created_at: string
   updated_at: string

@@ -28,53 +28,42 @@ export async function listInterviews(): Promise<InterviewWithClub[]> {
   return data as InterviewWithClub[]
 }
 
-export async function createInterview(input: {
-  dean_id: string
-  club_id: string
-  interview_date: string
-  interview_time: string
-  place: string
-  poste: string
-  department: string
-  coordinator_emails: string[]
-}) {
+export async function createInterview(input: InterviewInput): Promise<InterviewWithClub> {
+  const payload = {
+    dean_id: input.dean_id,
+    club_id: input.club_id,
+    interview_date: input.interview_date,
+    interview_time: input.interview_time,
+    place: input.place,
+    poste: input.poste,
+    department: input.department,
+    coordinator_emails: input.coordinator_emails,
+    status: 'pending' as const,
+  }
+
   const { data, error } = await supabase
     .from('interviews')
-    .insert({
-      dean_id: input.dean_id,
-      club_id: input.club_id,
-      interview_date: input.interview_date,
-      interview_time: input.interview_time,
-      place: input.place,
-      poste: input.poste,
-      department: input.department,
-      coordinator_emails: [input.coordinator_emails],
-      status: 'pending',
-    })
+    .insert(payload)
     .select('*, club:clubs(*)')
     .single()
 
-  if (error) {
-    console.error('Interview INSERT error:', error)
-    throw error
-  }
+  if (error) throw error
 
-  // Notify coordinator AFTER successful insert
-  const { error: notificationError } =
-    await supabase.functions.invoke('notify-interviewer', {
-      body: {
-        interview_id: data.id,
-      },
+  const interview = data as InterviewWithClub
+
+  // The interview is already persisted. Email delivery is intentionally
+  // non-blocking so SMTP failure cannot roll back the interview.
+  void supabase.functions
+    .invoke('notify-interviewer', {
+      body: { interview_id: interview.id },
+    })
+    .then(({ error: notifyError }) => {
+      if (notifyError) {
+        console.error('notify-interviewer failed:', notifyError)
+      }
     })
 
-  if (notificationError) {
-    console.error(
-      'Coordinator notification failed:',
-      notificationError
-    )
-  }
-
-  return data
+  return interview
 }
 
 export async function updateInterview(
@@ -94,4 +83,13 @@ export async function updateInterview(
 
 export async function markInterviewDone(id: string): Promise<InterviewWithClub> {
   return updateInterview(id, { status: 'done' })
+}
+
+export async function deleteInterview(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('interviews')
+    .delete()
+    .eq('id', id)
+
+  if (error) throw error
 }
