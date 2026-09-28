@@ -54,7 +54,7 @@ const DEPARTMENTS: { value: InterviewDepartment; label: string }[] = [
   { value: 'RH', label: 'RH' },
   { value: 'partenariat', label: 'Partenariat' },
   { value: 'PAP', label: 'PAP' },
-  { value: 'treasury', label: 'Treasury' },
+  { value: 'partenariat', label: 'Treasury' },
   { value: 'executive_bureau', label: 'Executive Bureau' },
 ]
 
