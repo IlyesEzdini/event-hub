@@ -153,7 +153,41 @@ function getDateRange(preset: DatePreset): { from?: string; to?: string } {
 }
 
 function formatInterviewDate(value: string) {
-  return new Date(`${value}T00:00:00`).toLocaleDateString('fr-FR')
+  if (!value) return 'No date selected'
+
+  const date = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return 'Invalid date'
+
+  return date.toLocaleDateString('fr-FR')
+}
+
+/**
+ * Database values are typed as text[], but this extra normalization keeps the
+ * UI safe if an older row contains null/empty/non-string values. A malformed
+ * coordinator value should never be able to crash the whole Interviews page.
+ */
+function getCoordinatorEmails(interview: InterviewWithClub): string[] {
+  if (!Array.isArray(interview.coordinator_emails)) return []
+
+  return interview.coordinator_emails.filter(
+    (email): email is string => typeof email === 'string' && email.trim().length > 0,
+  )
+}
+
+function interviewHasCoordinator(
+  interview: InterviewWithClub,
+  coordinatorEmail: string,
+) {
+  const target = coordinatorEmail.trim().toLowerCase()
+  if (!target) return false
+
+  return getCoordinatorEmails(interview).some(
+    (email) => email.trim().toLowerCase() === target,
+  )
+}
+
+function safeInterviewTime(value: unknown) {
+  return typeof value === 'string' ? value.slice(0, 5) : ''
 }
 
 export default function InterviewsPage() {
@@ -233,9 +267,7 @@ export default function InterviewsPage() {
       if (deanId !== 'all' && interview.dean_id !== deanId) return false
       if (
         coordinatorEmail !== 'all' &&
-        !interview.coordinator_emails?.some(
-          (email) => email.toLowerCase() === coordinatorEmail.toLowerCase(),
-        )
+        !interviewHasCoordinator(interview, coordinatorEmail)
       ) {
         return false
       }
@@ -298,11 +330,13 @@ export default function InterviewsPage() {
         (interview) =>
           interview.interview_date === availabilityDate &&
           interview.status === 'pending' &&
-          interview.coordinator_emails?.some(
-            (email) => email.toLowerCase() === availabilityCoordinator.toLowerCase(),
-          ),
+          interviewHasCoordinator(interview, availabilityCoordinator),
       )
-      .sort((a, b) => a.interview_time.localeCompare(b.interview_time))
+      .sort((a, b) =>
+        safeInterviewTime(a.interview_time).localeCompare(
+          safeInterviewTime(b.interview_time),
+        ),
+      )
   }, [interviews, availabilityCoordinator, availabilityDate])
 
   const availabilitySlots = useMemo(() => {
@@ -310,7 +344,7 @@ export default function InterviewsPage() {
     for (let hour = 8; hour <= 20; hour += 1) {
       const time = `${String(hour).padStart(2, '0')}:00`
       const interview = availabilityInterviews.find(
-        (item) => item.interview_time.slice(0, 5) === time,
+        (item) => safeInterviewTime(item.interview_time) === time,
       ) ?? null
       slots.push({ time, interview })
     }
@@ -747,7 +781,7 @@ export default function InterviewsPage() {
                 className="input"
                 type="date"
                 value={availabilityDate}
-                onChange={(e) => setAvailabilityDate(e.target.value)}
+                onChange={(e) => setAvailabilityDate(e.target.value || '')}
               />
             </FilterField>
           </div>
