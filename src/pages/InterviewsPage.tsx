@@ -43,8 +43,9 @@ import type {
 const POSTES: { value: InterviewPoste; label: string }[] = [
   { value: 'manager', label: 'Manager' },
   { value: 'assistant', label: 'Assistant' },
-  { value: 'president', label: 'President' },
   { value: 'vice_president', label: 'Vice-president' },
+  { value: 'president', label: 'President' },
+  { value: 'general_secretary', label: 'General Secretary' },
 ]
 
 const DEPARTMENTS: { value: InterviewDepartment; label: string }[] = [
@@ -53,6 +54,8 @@ const DEPARTMENTS: { value: InterviewDepartment; label: string }[] = [
   { value: 'RH', label: 'RH' },
   { value: 'partenariat', label: 'Partenariat' },
   { value: 'PAP', label: 'PAP' },
+  { value: 'treasury', label: 'Treasury' },
+  { value: 'executive_bureau', label: 'Executive Bureau' },
 ]
 
 const DATE_PRESETS = [
@@ -73,8 +76,25 @@ function requiredCoordinatorField(
   poste: InterviewPoste,
   department: InterviewDepartment,
 ): CoordinatorField {
-  if (poste === 'president' || poste === 'vice_president') return 'regional'
+  if (poste === 'president' || poste === 'vice_president' || poste === 'general_secretary') return 'regional'
+  if (department === 'executive_bureau') return 'regional'
   return department
+}
+
+function isExecutivePoste(poste: InterviewPoste) {
+  return (
+    poste === 'president' ||
+    poste === 'vice_president' ||
+    poste === 'general_secretary'
+  )
+}
+
+function getPosteLabel(poste: InterviewPoste) {
+  return POSTES.find((item) => item.value === poste)?.label ?? poste.replace('_', ' ')
+}
+
+function getDepartmentLabel(department: InterviewDepartment) {
+  return DEPARTMENTS.find((item) => item.value === department)?.label ?? department
 }
 
 function canManageInterview(
@@ -708,8 +728,8 @@ export default function InterviewsPage() {
             {datePreset !== 'all' && (
               <FilterChip label={`Date: ${DATE_PRESETS.find((item) => item.value === datePreset)?.label ?? datePreset}`} onRemove={() => setDatePreset('all')} />
             )}
-            {department !== 'all' && <FilterChip label={`Department: ${department}`} onRemove={() => setDepartment('all')} />}
-            {poste !== 'all' && <FilterChip label={`Poste: ${POSTES.find((item) => item.value === poste)?.label ?? poste}`} onRemove={() => setPoste('all')} />}
+            {department !== 'all' && <FilterChip label={`Department: ${getDepartmentLabel(department)}`} onRemove={() => setDepartment('all')} />}
+            {poste !== 'all' && <FilterChip label={`Poste: ${getPosteLabel(poste)}`} onRemove={() => setPoste('all')} />}
             {status !== 'all' && <FilterChip label={`Status: ${status}`} onRemove={() => setStatus('all')} />}
             {deanId !== 'all' && <FilterChip label={`Dean: ${deanProfiles.find((item) => item.id === deanId)?.manager_name ?? deanId}`} onRemove={() => setDeanId('all')} />}
             {coordinatorEmail !== 'all' && <FilterChip label={`Coordinator: ${coordinators.find((item) => item.email === coordinatorEmail)?.username ?? coordinatorEmail}`} onRemove={() => setCoordinatorEmail('all')} />}
@@ -969,6 +989,10 @@ function InterviewForm({
 }) {
   const availableClubs = isAdmin ? allClubs : responsibleClubs
   const initialDeanId = interview?.dean_id ?? (isDean ? profileId : '')
+  const initialPoste = interview?.poste ?? 'manager'
+  const initialDepartment = isExecutivePoste(initialPoste)
+    ? 'executive_bureau'
+    : (interview?.department ?? 'event')
   const initialCoordinatorEmail = interview?.coordinator_emails?.[0] ?? ''
 
   const [form, setForm] = useState<InterviewFormState>(() => ({
@@ -977,10 +1001,14 @@ function InterviewForm({
     interview_date: interview?.interview_date ?? '',
     interview_time: interview?.interview_time?.slice(0, 5) ?? '',
     place: interview?.place ?? '',
-    poste: interview?.poste ?? 'manager',
-    department: interview?.department ?? 'event',
+    poste: initialPoste,
+    department: initialDepartment,
     coordinator_email: initialCoordinatorEmail,
   }))
+
+  const departmentOptions: { value: InterviewDepartment; label: string }[] = isExecutivePoste(form.poste)
+    ? DEPARTMENTS.filter((item) => item.value === 'executive_bureau')
+    : DEPARTMENTS.filter((item) => item.value !== 'executive_bureau')
 
   const requiredField = requiredCoordinatorField(form.poste, form.department)
   const availableCoordinators = coordinators.filter(
@@ -996,11 +1024,19 @@ function InterviewForm({
   }
 
   function handlePoste(value: InterviewPoste) {
-    const field = requiredCoordinatorField(value, form.department)
+    const nextDepartment = isExecutivePoste(value)
+      ? 'executive_bureau'
+      : form.department === 'executive_bureau'
+        ? 'event'
+        : form.department
+
+    const field = requiredCoordinatorField(value, nextDepartment)
     const available = coordinators.filter((coordinator) => coordinator.field === field)
+
     setForm((current) => ({
       ...current,
       poste: value,
+      department: nextDepartment,
       coordinator_email: available.some(
         (coordinator) => coordinator.email === current.coordinator_email,
       )
@@ -1010,6 +1046,10 @@ function InterviewForm({
   }
 
   function handleDepartment(value: InterviewDepartment) {
+    if (isExecutivePoste(form.poste)) {
+      return
+    }
+
     const field = requiredCoordinatorField(form.poste, value)
     const available = coordinators.filter((coordinator) => coordinator.field === field)
     setForm((current) => ({
@@ -1116,9 +1156,10 @@ function InterviewForm({
           <select
             className="input"
             value={form.department}
+            disabled={isExecutivePoste(form.poste)}
             onChange={(e) => handleDepartment(e.target.value as InterviewDepartment)}
           >
-            {DEPARTMENTS.map((item) => (
+            {departmentOptions.map((item) => (
               <option key={item.value} value={item.value}>
                 {item.label}
               </option>
@@ -1142,7 +1183,11 @@ function InterviewForm({
           ))}
         </select>
         <p className="mt-1 text-xs text-slate-400">
-          Required field: <strong>{requiredField}</strong>
+          {isExecutivePoste(form.poste) ? (
+            <>Executive posts use the <strong>regional</strong> coordinator.</>
+          ) : (
+            <>Required field: <strong>{requiredField}</strong>. Treasury is available for Manager and Assistant posts.</>
+          )}
         </p>
         {availableCoordinators.length === 0 && (
           <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
@@ -1251,7 +1296,7 @@ function InterviewSection({
                 <div className="space-y-4 p-5">
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <InfoRow icon={<CalendarCheck2 size={15} />} label="Date" value={formatInterviewDate(interview.interview_date)} />
-                    <InfoRow icon={<Clock3 size={15} />} label="Time" value={interview.interview_time.slice(0, 5)} />
+                    <InfoRow icon={<Clock3 size={15} />} label="Time" value={safeInterviewTime(interview.interview_time)} />
                     <InfoRow icon={<MapPin size={15} />} label="Place" value={interview.place} />
                     <InfoRow icon={<UsersRound size={15} />} label="Coordinator" value={coordinatorName} />
                   </div>
@@ -1259,11 +1304,11 @@ function InterviewSection({
                   <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-4">
                     <div>
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Poste</p>
-                      <p className="mt-1 text-sm font-semibold capitalize text-slate-700">{interview.poste.replace('_', ' ')}</p>
+                      <p className="mt-1 text-sm font-semibold capitalize text-slate-700">{getPosteLabel(interview.poste)}</p>
                     </div>
                     <div>
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Department</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-700">{interview.department}</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-700">{getDepartmentLabel(interview.department)}</p>
                     </div>
                   </div>
 

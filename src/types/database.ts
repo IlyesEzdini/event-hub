@@ -1,7 +1,7 @@
 
 export type Role = 'admin' | 'manager' | 'assistant' | 'dean' | 'coordinator'
 
-export type CoordinatorField = 'event' | 'COM' | 'RH' | 'partenariat' | 'PAP' | 'regional'
+export type CoordinatorField = 'event' | 'COM' | 'RH' | 'partenariat' | 'PAP' | 'regional' | 'treasury'
 
 export interface Club {
   id: string
@@ -97,8 +97,8 @@ export interface DocumentResource {
   created_at: string
 }
 
-export type InterviewPoste = 'manager' | 'assistant' | 'president' | 'vice_president'
-export type InterviewDepartment = 'event' | 'COM' | 'RH' | 'partenariat' | 'PAP'
+export type InterviewPoste = 'manager' | 'assistant' | 'president' | 'vice_president' | 'general_secretary'
+export type InterviewDepartment = 'event' | 'COM' | 'RH' | 'partenariat' | 'PAP' | 'treasury' |'executive_bureau'
 export type InterviewStatus = 'pending' | 'done'
 
 export interface Coordinator {
