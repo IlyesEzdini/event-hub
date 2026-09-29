@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import path from 'path'
 
 export default defineConfig({
   plugins: [
@@ -12,11 +13,9 @@ export default defineConfig({
       manifest: {
         name: 'EventHub',
         short_name: 'EventHub',
-        description: 'Event management platform',
-
+        description: 'Event and interview management platform',
         theme_color: '#3a56e8',
         background_color: '#ffffff',
-
         display: 'standalone',
         start_url: '/',
 
@@ -35,4 +34,10 @@ export default defineConfig({
       },
     }),
   ],
+
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
 })
