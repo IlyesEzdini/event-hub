@@ -32,6 +32,11 @@ export const adminNav: NavItem[] = [
   { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
   { label: 'Notifications', to: '/admin/notifications', icon: Bell },
   { label: 'Calendar', to: '/calendar', icon: CalendarDays },
+    {
+    label: 'Interviews',
+    to: '/interviews',
+    icon: ClipboardList,
+  },
   { label: 'Reports', to: '/admin/reports', icon: FileText },
   { label: 'Event Requests', to: '/admin/event-requests', icon: ClipboardList },
   { label: 'Managers', to: '/admin/managers', icon: Users },
