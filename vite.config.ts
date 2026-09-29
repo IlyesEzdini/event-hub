@@ -12,7 +12,7 @@ export default defineConfig({
       manifest: {
         name: 'EventHub',
         short_name: 'EventHub',
-        description: 'Event and interview management platform',
+        description: 'Event management platform',
 
         theme_color: '#3a56e8',
         background_color: '#ffffff',
@@ -22,12 +22,12 @@ export default defineConfig({
 
         icons: [
           {
-            src: '/pwa-192x192.png',
+            src: '/image.png',
             sizes: '192x192',
             type: 'image/png',
           },
           {
-            src: '/pwa-512x512.png',
+            src: '/image.png',
             sizes: '512x512',
             type: 'image/png',
           },
