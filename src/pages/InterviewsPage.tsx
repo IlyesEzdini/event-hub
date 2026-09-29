@@ -454,25 +454,38 @@ export default function InterviewsPage() {
     }
   }
 
-  async function handleDelete(interview: InterviewWithClub) {
-    if (!isAdmin || !isDean )return
-
-    const confirmed = window.confirm(
-      `Delete the interview for ${interview.club?.name ?? 'this club'}? This action cannot be undone.`,
-    )
-    if (!confirmed) return
-
-    setDeletingId(interview.id)
-    try {
-      await deleteInterview(interview.id)
-      toast.success('Interview deleted.')
-      await reload()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to delete the interview.')
-    } finally {
-      setDeletingId(null)
-    }
+async function handleDelete(interview: InterviewWithClub) {
+  if (!canManageInterview(profile, interview)) {
+    toast.error('You can only delete your own interviews.')
+    return
   }
+
+  const confirmed = window.confirm(
+    `Delete the interview with ${interview.dean_name ?? 'this dean'}?`,
+  )
+
+  if (!confirmed) return
+
+  setDeletingId(interview.id)
+
+  try {
+    await deleteInterview(interview.id)
+
+    toast.success('Interview deleted.')
+
+    await reload()
+  } catch (error) {
+    console.error('Failed to delete interview:', error)
+
+    toast.error(
+      error instanceof Error
+        ? error.message
+        : 'Unable to delete the interview.',
+    )
+  } finally {
+    setDeletingId(null)
+  }
+}
 
   return (
     <div className="space-y-6">
@@ -1324,7 +1337,7 @@ function InterviewSection({
                           <CheckCircle2 size={14} /> Mark done
                         </button>
                       )}
-                      {isAdmin && (
+                      {canManage && (
                         <button
                           className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
                           onClick={() => onDelete(interview)}
