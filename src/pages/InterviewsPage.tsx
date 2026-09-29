@@ -455,7 +455,7 @@ export default function InterviewsPage() {
   }
 
   async function handleDelete(interview: InterviewWithClub) {
-    if (!isAdmin) return
+    if (!isAdmin || !isDean )return
 
     const confirmed = window.confirm(
       `Delete the interview for ${interview.club?.name ?? 'this club'}? This action cannot be undone.`,
