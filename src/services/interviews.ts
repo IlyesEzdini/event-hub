@@ -91,5 +91,7 @@ export async function deleteInterview(id: string): Promise<void> {
     .delete()
     .eq('id', id)
 
-  if (error) throw error
+  if (error) {
+    throw error
+  }
 }
