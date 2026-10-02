@@ -64,7 +64,7 @@ export default function App() {
               <Route path="/profile" element={<ProfilePage />} />
             </Route>
 
-            <Route element={<ProtectedRoute allowedRoles={['dean', 'coordinator']} />}>
+            <Route element={<ProtectedRoute allowedRoles={['dean', 'coordinator','admin']} />}>
               <Route path="/interviews" element={<InterviewsPage />} />
             </Route>
 
