@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Check,
   CheckCircle2,
+  Clock3,
   ExternalLink,
   MapPin,
   MoreVertical,
@@ -15,6 +16,8 @@ import {
   Trash2,
   UserRound,
   Users,
+  Mail,
+  ShieldCheck,
   Video,
 } from 'lucide-react'
 import {
@@ -36,6 +39,7 @@ import { useMeetings } from '@/hooks/useMeetings'
 import { listManagers } from '@/services/managers'
 import { listAssistants } from '@/services/assistants'
 import { createMeeting, deleteMeeting, markMeetingDone, updateMeeting } from '@/services/meetings'
+import { previewRegionalMeetingEmail, sendRegionalMeetingEmail, type RegionalMeetingEmailPreview } from '@/services/regionalMeetingEmail'
 import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { CardSkeleton } from '@/components/ui/Skeleton'
@@ -44,6 +48,13 @@ import type { Club, Meeting, MeetingInput, ProfileWithClub } from '@/types/datab
 const DAY_START = 8 * 60
 const DAY_END = 20 * 60
 const HOUR_HEIGHT = 60
+const REGIONAL_COORDINATOR_COLOR = {
+  border: 'border-l-red-500',
+  bg: 'bg-red-50',
+  text: 'text-red-950',
+  accent: 'text-red-600',
+  dot: 'bg-red-500',
+}
 const COORDINATOR_COLOR = {
   border: 'border-l-cyan-500',
   bg: 'bg-cyan-50',
@@ -69,7 +80,10 @@ function hashString(value: string) {
 }
 
 function creatorColor(meeting: Meeting): MeetingColor {
-  if (meeting.created_by_coordinator_email) return COORDINATOR_COLOR
+  if (meeting.created_by_coordinator_email) {
+    if (meeting.created_by_coordinator_field === 'regional') return REGIONAL_COORDINATOR_COLOR
+    return COORDINATOR_COLOR
+  }
   return DEAN_COLORS[hashString(meeting.username) % DEAN_COLORS.length]
 }
 
@@ -127,8 +141,13 @@ export default function MeetingsPage() {
   const [staffLoading, setStaffLoading] = useState(false)
   const [managers, setManagers] = useState<ProfileWithClub[]>([])
   const [assistants, setAssistants] = useState<ProfileWithClub[]>([])
+  const [regionalPreview, setRegionalPreview] = useState<RegionalMeetingEmailPreview | null>(null)
+  const [pendingRegionalMeeting, setPendingRegionalMeeting] = useState<MeetingInput | null>(null)
+  const [regionalConfirm, setRegionalConfirm] = useState(false)
+  const [sendingRegionalEmail, setSendingRegionalEmail] = useState(false)
 
   const isEventCoordinator = profile?.role === 'coordinator' && profile.field?.toLowerCase() === 'event'
+  const isRegionalCoordinator = profile?.role === 'coordinator' && profile.field?.toLowerCase() === 'regional'
   const isAuthorized = profile?.role === 'admin' || profile?.role === 'dean' || profile?.role === 'coordinator'
 
   useEffect(() => {
@@ -169,7 +188,7 @@ export default function MeetingsPage() {
     if (!query) return meetings
     return meetings.filter((meeting) => {
       const clubNames = (meeting.club_ids ?? [])
-        .map((id) => clubs.find((club) => club.id === id)?.name ?? '')
+        .map((id: any) => clubs.find((club) => club.id === id)?.name ?? '')
         .join(' ')
       return [
         meeting.username,
@@ -249,10 +268,26 @@ export default function MeetingsPage() {
         if (!canManageMeeting(profile, editing)) throw new Error('You can only edit your own meetings.')
         await updateMeeting(editing.id, input)
         toast.success('Meeting updated.')
-      } else {
-        await createMeeting(input)
-        toast.success('Meeting created.')
+        setFormOpen(false)
+        setEditing(null)
+        await reload()
+        return
       }
+
+      // A regional-coordinator meeting is a broadcast. Before anything is
+      // inserted, ask the server for the exact recipient list and rendered
+      // email so the creator can verify and explicitly approve the send.
+      if (isRegionalCoordinator) {
+        const preview = await previewRegionalMeetingEmail(input)
+        setPendingRegionalMeeting(input)
+        setRegionalPreview(preview)
+        setRegionalConfirm(false)
+        setFormOpen(false)
+        return
+      }
+
+      await createMeeting(input)
+      toast.success('Meeting created.')
       setFormOpen(false)
       setEditing(null)
       await reload()
@@ -260,6 +295,29 @@ export default function MeetingsPage() {
       toast.error(e instanceof Error ? e.message : 'Unable to save the meeting.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function confirmRegionalMeeting() {
+    if (!pendingRegionalMeeting || !regionalPreview || !regionalConfirm) return
+    setSendingRegionalEmail(true)
+    try {
+      const meeting = await createMeeting(pendingRegionalMeeting)
+      try {
+        await sendRegionalMeetingEmail(meeting.id)
+        toast.success(`Meeting created and email sent to ${regionalPreview.recipients.length} recipients.`)
+      } catch (emailError) {
+        toast.error(`Meeting created, but the email could not be sent: ${emailError instanceof Error ? emailError.message : 'Unknown email error'}`)
+      }
+      setRegionalPreview(null)
+      setPendingRegionalMeeting(null)
+      setRegionalConfirm(false)
+      setEditing(null)
+      await reload()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'The meeting could not be created. No email was sent.')
+    } finally {
+      setSendingRegionalEmail(false)
     }
   }
 
@@ -512,6 +570,69 @@ export default function MeetingsPage() {
             onDone={() => { setViewing(null); void handleDone(viewing) }}
             onDelete={() => { setViewing(null); setDeleteTarget(viewing) }}
           />
+        )}
+      </Modal>
+
+      <Modal
+        open={!!regionalPreview}
+        onClose={() => !sendingRegionalEmail && setRegionalPreview(null)}
+        title="Verify regional meeting email"
+        maxWidth="max-w-4xl"
+      >
+        {regionalPreview && (
+          <div className="space-y-5">
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-600"><ShieldCheck size={20} /></div>
+                <div>
+                  <p className="font-bold text-red-950">Review before sending</p>
+                  <p className="mt-1 text-sm leading-6 text-red-800">This meeting will be created only after you confirm. Once created, EventHub will send this exact email to the recipients below.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-[290px_minmax(0,1fr)]">
+              <div className="space-y-3">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-400"><Mail size={14} /> Email details</div>
+                  <div className="mt-4 space-y-3 text-sm">
+                    <div><p className="text-xs font-semibold text-slate-400">From</p><p className="font-semibold text-slate-800">{regionalPreview.sender_name} · Regional Coordinator</p></div>
+                    <div><p className="text-xs font-semibold text-slate-400">Subject</p><p className="font-semibold text-slate-800">{regionalPreview.subject}</p></div>
+                    <div><p className="text-xs font-semibold text-slate-400">Recipients</p><p className="font-bold text-slate-900">{regionalPreview.recipients.length} people</p><p className="mt-1 text-xs leading-5 text-slate-500">{regionalPreview.recipients.filter((r) => r.type === 'Dean').length} deans · {regionalPreview.recipients.filter((r) => r.type === 'Coordinator').length} other coordinators</p></div>
+                  </div>
+                </div>
+
+                <div className="max-h-56 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3">
+                  <p className="px-1 text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Exact recipients</p>
+                  <div className="mt-2 space-y-1">
+                    {regionalPreview.recipients.map((recipient) => (
+                      <div key={recipient.email} className="rounded-lg px-2 py-1.5 hover:bg-slate-50">
+                        <p className="text-xs font-semibold text-slate-800">{recipient.name} <span className="font-normal text-slate-400">· {recipient.type}</span></p>
+                        <p className="truncate text-[11px] text-slate-500">{recipient.email}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+                <div className="border-b border-slate-200 bg-white px-4 py-3"><p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Email preview</p></div>
+                <div className="max-h-[560px] overflow-y-auto" dangerouslySetInnerHTML={{ __html: regionalPreview.html }} />
+              </div>
+            </div>
+
+            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+              <input type="checkbox" className="mt-1 h-4 w-4 accent-red-600" checked={regionalConfirm} onChange={(e) => setRegionalConfirm(e.target.checked)} />
+              <span><span className="block text-sm font-bold text-slate-900">I have reviewed the meeting and email</span><span className="mt-1 block text-xs leading-5 text-slate-500">I confirm that the meeting details and recipient list are correct, and I authorize EventHub to create the meeting and send this email.</span></span>
+            </label>
+
+            <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+              <button type="button" className="btn-secondary" onClick={() => setRegionalPreview(null)} disabled={sendingRegionalEmail}>Back</button>
+              <button type="button" className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50" onClick={() => void confirmRegionalMeeting()} disabled={!regionalConfirm || sendingRegionalEmail}>
+                <Mail size={16} /> {sendingRegionalEmail ? 'Creating & sending…' : 'Confirm & create meeting'}
+              </button>
+            </div>
+          </div>
         )}
       </Modal>
 

@@ -136,6 +136,7 @@ export interface Meeting {
   username: string
   created_by_profile_id: string | null
   created_by_coordinator_email: string | null
+  created_by_coordinator_field: CoordinatorField | null
   club_ids: string[] | null
   meeting_date: string
   start_time: string
