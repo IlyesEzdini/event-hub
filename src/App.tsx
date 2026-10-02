@@ -74,6 +74,7 @@ export default function App() {
               <Route path="/admin/reports" element={<AdminReportsPage />} />
               <Route path="/admin/event-requests" element={<EventRequestsAdminPage />} />
               <Route path="/admin/notifications" element={<NotificationsPage />} />
+              <Route path="/resources" element={<ResourcesPage />} />
             </Route>
            </Route>
           </Route>
