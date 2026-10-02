@@ -1,7 +1,7 @@
 
 export type Role = 'admin' | 'manager' | 'assistant' | 'dean' | 'coordinator'
 
-export type CoordinatorField = 'event' | 'COM' | 'RH' | 'partenariat' | 'PAP' | 'regional' | 'treasury'
+export type CoordinatorField = 'event' | 'COM' | 'RH' | 'partenariat' | 'PAP' | 'treasury' | 'regional'
 
 export interface Club {
   id: string
@@ -98,7 +98,7 @@ export interface DocumentResource {
 }
 
 export type InterviewPoste = 'manager' | 'assistant' | 'president' | 'vice_president' | 'general_secretary'
-export type InterviewDepartment = 'event' | 'COM' | 'RH' | 'partenariat' | 'PAP' | 'treasury' |'executive_bureau'
+export type InterviewDepartment = 'event' | 'COM' | 'RH' | 'partenariat' | 'PAP' | 'treasury' | 'executive_bureau'
 export type InterviewStatus = 'pending' | 'done'
 
 export interface Coordinator {
@@ -127,6 +127,37 @@ export interface Interview {
 
 export interface InterviewWithClub extends Interview {
   club: Club | null
+}
+
+export type MeetingStatus = 'pending' | 'done'
+
+export interface Meeting {
+  id: string
+  username: string
+  created_by_profile_id: string | null
+  created_by_coordinator_email: string | null
+  club_ids: string[] | null
+  meeting_date: string
+  start_time: string
+  end_time: string
+  description: string
+  is_online: boolean
+  place: string | null
+  meeting_link: string | null
+  status: MeetingStatus
+  created_at: string
+  updated_at: string
+}
+
+export interface MeetingInput {
+  club_ids: string[] | null
+  meeting_date: string
+  start_time: string
+  end_time: string
+  description: string
+  is_online: boolean
+  place: string | null
+  meeting_link: string | null
 }
 
 export interface CurrentUser extends Omit<ProfileWithClub, 'id' | 'auth_user_id' | 'created_at' | 'updated_at'> {

@@ -10,6 +10,7 @@ import DeanDashboard from '@/pages/DeanDashboard'
 import InterviewsPage from '@/pages/InterviewsPage'
 import AdminDashboard from '@/pages/AdminDashboard'
 import CalendarPage from '@/pages/CalendarPage'
+import MeetingsPage from '@/pages/MeetingsPage'
 import ReportsPage from '@/pages/ReportsPage'
 import EventRequestPage from '@/pages/EventRequestPage'
 import ResourcesPage from '@/pages/ResourcesPage'
@@ -49,6 +50,10 @@ export default function App() {
             <Route path="/dashboard" element={<DashboardRouter />} />
             <Route path="/calendar" element={<CalendarPage />} />
 
+            <Route element={<ProtectedRoute allowedRoles={['admin', 'dean', 'coordinator']} />}>
+              <Route path="/meetings" element={<MeetingsPage />} />
+            </Route>
+
             <Route element={<ProtectedRoute allowedRoles={['manager']} />}>
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/event-request" element={<EventRequestPage />} />
@@ -59,7 +64,7 @@ export default function App() {
               <Route path="/profile" element={<ProfilePage />} />
             </Route>
 
-            <Route element={<ProtectedRoute allowedRoles={['dean', 'coordinator','admin']} />}>
+            <Route element={<ProtectedRoute allowedRoles={['dean', 'coordinator']} />}>
               <Route path="/interviews" element={<InterviewsPage />} />
             </Route>
 
@@ -69,7 +74,6 @@ export default function App() {
               <Route path="/admin/reports" element={<AdminReportsPage />} />
               <Route path="/admin/event-requests" element={<EventRequestsAdminPage />} />
               <Route path="/admin/notifications" element={<NotificationsPage />} />
-              <Route path="/interviews" element={<InterviewsPage />} />
             </Route>
            </Route>
           </Route>
