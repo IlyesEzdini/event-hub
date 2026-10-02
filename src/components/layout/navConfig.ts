@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
   CalendarDays,
+  CalendarClock,
   FileText,
   Users,
   Building2,
@@ -32,11 +33,19 @@ export const adminNav: NavItem[] = [
   { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
   { label: 'Notifications', to: '/admin/notifications', icon: Bell },
   { label: 'Calendar', to: '/calendar', icon: CalendarDays },
-    {
+
+  {
     label: 'Interviews',
     to: '/interviews',
     icon: ClipboardList,
   },
+
+  {
+    label: 'Meetings',
+    to: '/meetings',
+    icon: CalendarClock,
+  },
+
   { label: 'Reports', to: '/admin/reports', icon: FileText },
   { label: 'Event Requests', to: '/admin/event-requests', icon: ClipboardList },
   { label: 'Managers', to: '/admin/managers', icon: Users },
@@ -48,10 +57,32 @@ export const adminNav: NavItem[] = [
 export const deanNav: NavItem[] = [
   { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
   { label: 'Calendar', to: '/calendar', icon: CalendarDays },
-  { label: 'Interviews', to: '/interviews', icon: ClipboardCheck },
+
+  {
+    label: 'Interviews',
+    to: '/interviews',
+    icon: ClipboardCheck,
+  },
+
+  {
+    label: 'Meetings',
+    to: '/meetings',
+    icon: CalendarClock,
+  },
 ]
 
 export const coordinatorNav: NavItem[] = [
   { label: 'Calendar', to: '/calendar', icon: CalendarDays },
-  { label: 'Interviews', to: '/interviews', icon: ClipboardCheck },
+
+  {
+    label: 'Interviews',
+    to: '/interviews',
+    icon: ClipboardCheck,
+  },
+
+  {
+    label: 'Meetings',
+    to: '/meetings',
+    icon: CalendarClock,
+  },
 ]
