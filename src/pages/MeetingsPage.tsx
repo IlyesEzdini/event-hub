@@ -100,6 +100,72 @@ function formatRange(meeting: Meeting) {
   return `${formatTime(meeting.start_time)} – ${formatTime(meeting.end_time)}`
 }
 
+type MeetingLayout = {
+  column: number
+  columns: number
+}
+
+/**
+ * Build collision-aware columns for a single day. Meetings that overlap in
+ * time are placed next to each other instead of being painted on top of one
+ * another. Non-overlapping meetings can reuse the same column.
+ */
+function layoutDayMeetings(dayMeetings: Meeting[]): Map<string, MeetingLayout> {
+  const sorted = [...dayMeetings].sort((a, b) => {
+    const startDiff = timeToMinutes(a.start_time) - timeToMinutes(b.start_time)
+    if (startDiff !== 0) return startDiff
+    return timeToMinutes(b.end_time) - timeToMinutes(a.end_time)
+  })
+
+  const groups: Meeting[][] = []
+  let currentGroup: Meeting[] = []
+  let groupEnd = -1
+
+  for (const meeting of sorted) {
+    const start = timeToMinutes(meeting.start_time)
+    const end = timeToMinutes(meeting.end_time)
+
+    if (currentGroup.length === 0 || start < groupEnd) {
+      currentGroup.push(meeting)
+      groupEnd = Math.max(groupEnd, end)
+    } else {
+      groups.push(currentGroup)
+      currentGroup = [meeting]
+      groupEnd = end
+    }
+  }
+  if (currentGroup.length) groups.push(currentGroup)
+
+  const layout = new Map<string, MeetingLayout>()
+
+  for (const group of groups) {
+    const columnEnds: number[] = []
+
+    for (const meeting of group) {
+      const start = timeToMinutes(meeting.start_time)
+      const end = timeToMinutes(meeting.end_time)
+      let column = columnEnds.findIndex((columnEnd) => columnEnd <= start)
+
+      if (column === -1) {
+        column = columnEnds.length
+        columnEnds.push(end)
+      } else {
+        columnEnds[column] = end
+      }
+
+      layout.set(meeting.id, { column, columns: 0 })
+    }
+
+    const columns = columnEnds.length
+    for (const meeting of group) {
+      const item = layout.get(meeting.id)
+      if (item) item.columns = columns
+    }
+  }
+
+  return layout
+}
+
 function getMeetingTitle(meeting: Meeting) {
   const firstLine = meeting.description.trim().split(/\r?\n/)[0]?.trim()
   return firstLine || 'Meeting'
@@ -188,7 +254,7 @@ export default function MeetingsPage() {
     if (!query) return meetings
     return meetings.filter((meeting) => {
       const clubNames = (meeting.club_ids ?? [])
-        .map((id: any) => clubs.find((club) => club.id === id)?.name ?? '')
+        .map((id) => clubs.find((club) => club.id === id)?.name ?? '')
         .join(' ')
       return [
         meeting.username,
@@ -381,7 +447,7 @@ export default function MeetingsPage() {
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_290px]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_310px]">
         <section className="card overflow-hidden">
           <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
             <div className="flex items-center gap-2">
@@ -401,8 +467,8 @@ export default function MeetingsPage() {
             <div className="p-8 text-center text-sm text-rose-600">{error}</div>
           ) : (
             <div className="overflow-x-auto">
-              <div className="min-w-[880px]">
-                <div className="grid grid-cols-[56px_repeat(7,minmax(110px,1fr))] border-b border-slate-100 bg-white">
+              <div className="min-w-[1120px]">
+                <div className="grid grid-cols-[64px_repeat(7,minmax(150px,1fr))] border-b border-slate-100 bg-white">
                   <div />
                   {weekDays.map((day) => {
                     const active = isSameDay(day, selectedDay)
@@ -423,7 +489,7 @@ export default function MeetingsPage() {
                   })}
                 </div>
 
-                <div className="grid grid-cols-[56px_repeat(7,minmax(110px,1fr))]">
+                <div className="grid grid-cols-[64px_repeat(7,minmax(150px,1fr))]">
                   <div className="relative h-[720px] bg-white">
                     {Array.from({ length: 13 }, (_, index) => {
                       const hour = 8 + index
@@ -433,6 +499,7 @@ export default function MeetingsPage() {
 
                   {weekDays.map((day) => {
                     const dayMeetings = weekMeetings.filter((meeting) => meeting.meeting_date === format(day, 'yyyy-MM-dd'))
+                    const layout = layoutDayMeetings(dayMeetings)
                     return (
                       <div
                         key={day.toISOString()}
@@ -449,16 +516,20 @@ export default function MeetingsPage() {
                           const top = ((start - DAY_START) / 60) * HOUR_HEIGHT + 5
                           const height = Math.max(62, ((Math.max(end, start + 30) - start) / 60) * HOUR_HEIGHT - 8)
                           const own = canManageMeeting(profile, meeting)
+                          const position = layout.get(meeting.id) ?? { column: 0, columns: 1 }
+                          const gap = 5
+                          const width = `calc(${100 / position.columns}% - ${gap}px)`
+                          const left = `calc(${(position.column * 100) / position.columns}% + ${gap / 2}px)`
                           return (
                             <button
                               key={meeting.id}
                               onClick={() => openEdit(meeting)}
-                              className={`absolute left-1.5 right-1.5 overflow-hidden rounded-xl border border-slate-200/70 border-l-4 p-2 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-card ${color.border} ${color.bg} ${meeting.status === 'done' ? 'opacity-60' : ''}`}
-                              style={{ top, height }}
+                              className={`absolute overflow-hidden rounded-xl border border-slate-200/70 border-l-4 p-2 text-left shadow-sm transition hover:z-10 hover:-translate-y-0.5 hover:shadow-card ${color.border} ${color.bg} ${meeting.status === 'done' ? 'opacity-60' : ''}`}
+                              style={{ top, height, left, width }}
                               title={`${formatRange(meeting)} · ${meeting.username}`}
                             >
-                              <p className={`text-[10px] font-semibold ${color.accent}`}>{formatRange(meeting)}</p>
-                              <p className={`mt-0.5 line-clamp-1 text-xs font-bold ${color.text}`}>{getMeetingTitle(meeting)}</p>
+                              <p className={`truncate text-[10px] font-semibold ${color.accent}`}>{formatRange(meeting)}</p>
+                              <p className={`mt-0.5 line-clamp-2 text-xs font-bold ${color.text}`}>{getMeetingTitle(meeting)}</p>
                               <p className="mt-1 line-clamp-1 text-[10px] text-slate-500">{getClubLabel(meeting, clubs)}</p>
                               {height > 85 && (
                                 <p className="mt-1 flex items-center gap-1 truncate text-[10px] text-slate-500">
@@ -845,6 +916,7 @@ function MeetingForm({
   const [meetingLink, setMeetingLink] = useState(meeting?.meeting_link ?? '')
   const [allSelected, setAllSelected] = useState(meeting?.club_ids === null)
   const [selectedClubs, setSelectedClubs] = useState<string[]>(meeting?.club_ids ?? [])
+  const isRegionalCoordinator = profile?.role === 'coordinator' && profile.field?.toLowerCase() === 'regional'
 
   const staffByClub = useMemo(() => {
     const result = new Map<string, { managers: ProfileWithClub[]; assistants: ProfileWithClub[] }>()
@@ -883,12 +955,12 @@ function MeetingForm({
       toast.error('End time must be after start time.')
       return
     }
-    if (!allSelected && selectedClubs.length === 0) {
+    if (!isRegionalCoordinator && !allSelected && selectedClubs.length === 0) {
       toast.error('Select at least one club or choose All clubs.')
       return
     }
     await onSubmit({
-      club_ids: allSelected ? null : selectedClubs,
+      club_ids: isRegionalCoordinator ? null : (allSelected ? null : selectedClubs),
       meeting_date: date,
       start_time: startTime,
       end_time: endTime,
@@ -911,41 +983,43 @@ function MeetingForm({
         </div>
       </div>
 
-      <div>
-        <label className="label">Clubs</label>
-        <button type="button" onClick={toggleAll} className={`flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition ${allSelected ? 'border-brand-400 bg-brand-50 text-brand-800' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
-          <span className={`flex h-5 w-5 items-center justify-center rounded-md border ${allSelected ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-300 bg-white'}`}>{allSelected && <Check size={13} />}</span>
-          <span><span className="block text-sm font-semibold">All clubs</span><span className="block text-xs text-slate-400">{profile?.role === 'dean' ? 'All clubs under your management' : 'Shared across EventHub'}</span></span>
-        </button>
-
-        <div className="mt-2 max-h-64 space-y-2 overflow-y-auto pr-1">
-          {clubs.map((club) => {
-            const selected = selectedClubs.includes(club.id)
-            const staff = staffByClub.get(club.id)
-            return (
-              <button key={club.id} type="button" onClick={() => toggleClub(club.id)} className={`w-full rounded-xl border p-3 text-left transition ${selected ? 'border-brand-300 bg-brand-50/60' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
-                <div className="flex items-start gap-3">
-                  <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${selected ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-300 bg-white'}`}>{selected && <Check size={13} />}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-slate-800">{club.name}</p>
-                    {isEventCoordinator && (
-                      <div className="mt-1.5 space-y-0.5 text-xs text-slate-500">
-                        {staffLoading ? <span>Loading club staff…</span> : (
-                          <>
-                            {staff?.managers.map((person) => <p key={`m-${person.id}`}>{person.manager_name} · Manager</p>)}
-                            {staff?.assistants.map((person) => <p key={`a-${person.id}`}>{person.manager_name} · Assistant</p>)}
-                            {!staff?.managers.length && !staff?.assistants.length && <p>No manager or assistant linked.</p>}
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
+      {!isRegionalCoordinator && (
+              <div>
+                <label className="label">Clubs</label>
+                <button type="button" onClick={toggleAll} className={`flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition ${allSelected ? 'border-brand-400 bg-brand-50 text-brand-800' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
+                  <span className={`flex h-5 w-5 items-center justify-center rounded-md border ${allSelected ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-300 bg-white'}`}>{allSelected && <Check size={13} />}</span>
+                  <span><span className="block text-sm font-semibold">All clubs</span><span className="block text-xs text-slate-400">{profile?.role === 'dean' ? 'All clubs under your management' : 'Shared across EventHub'}</span></span>
+                </button>
+        
+                <div className="mt-2 max-h-64 space-y-2 overflow-y-auto pr-1">
+                  {clubs.map((club) => {
+                    const selected = selectedClubs.includes(club.id)
+                    const staff = staffByClub.get(club.id)
+                    return (
+                      <button key={club.id} type="button" onClick={() => toggleClub(club.id)} className={`w-full rounded-xl border p-3 text-left transition ${selected ? 'border-brand-300 bg-brand-50/60' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
+                        <div className="flex items-start gap-3">
+                          <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${selected ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-300 bg-white'}`}>{selected && <Check size={13} />}</span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-slate-800">{club.name}</p>
+                            {isEventCoordinator && (
+                              <div className="mt-1.5 space-y-0.5 text-xs text-slate-500">
+                                {staffLoading ? <span>Loading club staff…</span> : (
+                                  <>
+                                    {staff?.managers.map((person) => <p key={`m-${person.id}`}>{person.manager_name} · Manager</p>)}
+                                    {staff?.assistants.map((person) => <p key={`a-${person.id}`}>{person.manager_name} · Assistant</p>)}
+                                    {!staff?.managers.length && !staff?.assistants.length && <p>No manager or assistant linked.</p>}
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })}
                 </div>
-              </button>
-            )
-          })}
-        </div>
-      </div>
+              </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-3">
         <div><label className="label">Date</label><input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} required /></div>
