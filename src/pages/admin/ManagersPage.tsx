@@ -48,6 +48,8 @@ export default function ManagersPage() {
 
   const [viewMode, setViewMode] = useState<'all' | 'manager' | 'assistant'>('all')
   const [selectedClubId, setSelectedClubId] = useState('all')
+  const [selectedDeanId, setSelectedDeanId] = useState('all')
+  const [clubStatus, setClubStatus] = useState<'all' | 'active' | 'inactive'>('all')
 
   function openAdd() {
     setActive(null)
@@ -78,20 +80,45 @@ export default function ManagersPage() {
   const assistantsByManager = (managerId: string) =>
     assistants.filter((a) => a.assists_manager_id === managerId)
 
-  const sortedClubs = [...clubs].sort((a, b) =>
-    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
-  )
-
-  const filteredClubs =
-    selectedClubId === 'all'
-      ? sortedClubs
-      : sortedClubs.filter((club) => club.id === selectedClubId)
-
-  const managersWithoutClub = managers.filter((manager) => !manager.club_id)
-
   function getManagerForClub(clubId: string) {
     return managers.find((manager) => manager.club_id === clubId)
   }
+
+  const sortedClubs = [...clubs].sort((a, b) => {
+    const managerA = getManagerForClub(a.id)
+    const managerB = getManagerForClub(b.id)
+
+    // Clubs with an assigned manager always come first.
+    if (managerA && !managerB) return -1
+    if (!managerA && managerB) return 1
+
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+  })
+
+  const filteredClubs = sortedClubs.filter((club) => {
+    const manager = getManagerForClub(club.id)
+
+    if (selectedClubId !== 'all' && club.id !== selectedClubId) {
+      return false
+    }
+
+    if (selectedDeanId !== 'all' && manager?.dean_id !== selectedDeanId) {
+      return false
+    }
+
+    // Club status is based on manager assignment, not manager login status.
+    if (clubStatus === 'active' && !manager) {
+      return false
+    }
+
+    if (clubStatus === 'inactive' && manager) {
+      return false
+    }
+
+    return true
+  })
+
+  const managersWithoutClub = managers.filter((manager) => !manager.club_id)
 
   function downloadFilteredList() {
     const rows: string[][] = [['Type', 'Name', 'Username', 'Club', 'Phone', 'Email', 'Dean', 'Status', 'Manager']]
@@ -150,15 +177,12 @@ export default function ManagersPage() {
     }
 
     const csv = rows
-  .map((row) =>
-    row
-      .map(
-        (value) =>
-          `"${String(value).replace(/"/g, '""')}"`
+      .map((row) =>
+        row
+          .map((value) => `"${String(value).replace(/"/g, '""')}"`)
+          .join(','),
       )
-      .join(',')
-  )
-  .join('\n')
+      .join('\n')
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -281,43 +305,41 @@ export default function ManagersPage() {
 
       {/* Filters */}
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div className="space-y-3">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
-                I want to see
-              </p>
+        <div className="space-y-5">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+              I want to see
+            </p>
 
-              <div className="mt-2 inline-flex flex-wrap rounded-xl bg-slate-100 p-1">
-                {[
-                  { value: 'all' as const, label: 'Everyone', icon: Users },
-                  { value: 'manager' as const, label: 'Managers', icon: Crown },
-                  { value: 'assistant' as const, label: 'Assistants', icon: UserPlus },
-                ].map(({ value, label, icon: Icon }) => {
-                  const selected = viewMode === value
+            <div className="mt-2 inline-flex flex-wrap rounded-xl bg-slate-100 p-1">
+              {[
+                { value: 'all' as const, label: 'Everyone', icon: Users },
+                { value: 'manager' as const, label: 'Managers', icon: Crown },
+                { value: 'assistant' as const, label: 'Assistants', icon: UserPlus },
+              ].map(({ value, label, icon: Icon }) => {
+                const selected = viewMode === value
 
-                  return (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setViewMode(value)}
-                      className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition ${
-                        selected
-                          ? 'bg-white text-brand-700 shadow-sm ring-1 ring-slate-200'
-                          : 'text-slate-500 hover:text-slate-800'
-                      }`}
-                    >
-                      <Icon size={15} />
-                      {label}
-                    </button>
-                  )
-                })}
-              </div>
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setViewMode(value)}
+                    className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition ${
+                      selected
+                        ? 'bg-white text-brand-700 shadow-sm ring-1 ring-slate-200'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    <Icon size={15} />
+                    {label}
+                  </button>
+                )
+              })}
             </div>
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <div className="min-w-[240px]">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div>
               <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
                 Filter by club
               </label>
@@ -342,14 +364,57 @@ export default function ManagersPage() {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={downloadFilteredList}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700"
-            >
-              <Download size={16} />
-              Download
-            </button>
+            <div>
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+                Filter by dean
+              </label>
+
+              <select
+                className="input"
+                value={selectedDeanId}
+                onChange={(e) => setSelectedDeanId(e.target.value)}
+              >
+                <option value="all">All deans</option>
+                {deans.map((dean) => (
+                  <option key={dean.id} value={dean.id}>
+                    {dean.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+                Club status
+              </label>
+
+              <select
+                className="input"
+                value={clubStatus}
+                onChange={(e) =>
+                  setClubStatus(e.target.value as 'all' | 'active' | 'inactive')
+                }
+              >
+                <option value="all">All clubs</option>
+                <option value="active">Active — manager assigned</option>
+                <option value="inactive">Inactive — no manager</option>
+              </select>
+
+              <p className="mt-1.5 text-[11px] leading-4 text-slate-400">
+                Active = manager assigned. Inactive = no manager assigned.
+              </p>
+            </div>
+
+            <div className="flex items-end">
+              <button
+                type="button"
+                onClick={downloadFilteredList}
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700"
+              >
+                <Download size={16} />
+                Download
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -402,13 +467,21 @@ export default function ManagersPage() {
 
                     <div className="flex flex-wrap items-center gap-2">
                       {manager ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-1.5 text-xs font-bold text-brand-700 ring-1 ring-brand-100">
-                          <Crown size={13} />
-                          Manager assigned
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200">
+                          <CheckCircle2 size={13} />
+                          Active club
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-700 ring-1 ring-amber-200">
-                          No manager assigned
+                          <Ban size={13} />
+                          Inactive — no manager
+                        </span>
+                      )}
+
+                      {manager && (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-1.5 text-xs font-bold text-brand-700 ring-1 ring-brand-100">
+                          <Crown size={13} />
+                          {manager.manager_name}
                         </span>
                       )}
 
@@ -580,7 +653,7 @@ export default function ManagersPage() {
                                 </div>
 
                                 <p className="truncate text-xs text-slate-500">
-                                  @{'assistant'}
+                                  @{assistant.username || 'assistant'}
                                 </p>
 
                                 <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-slate-400">
