@@ -4,12 +4,11 @@ import { MobileTopbar } from '@/components/layout/MobileNav'
 
 export function AppLayout() {
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-[#f3f6fc] text-slate-900">
       <Sidebar />
       <MobileTopbar />
-
-      <div className="lg:pl-64">
-        <main className="w-full px-4 py-4 pb-24 sm:px-5 lg:px-6 lg:py-6 lg:pb-6">
+      <div className="min-w-0 lg:pl-64">
+        <main className="min-w-0 w-full px-4 py-5 pb-24 sm:px-6 lg:px-8 lg:py-8 lg:pb-8">
           <Outlet />
         </main>
       </div>
